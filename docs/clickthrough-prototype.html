@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Magma Autospa — Clickthrough Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-base:#0d1013;
+  --bg-app:#0f1216;
+  --panel:#171c22;
+  --panel-2:#1d232b;
+  --panel-3:#242b34;
+  --glass-border:rgba(255,255,255,0.08);
+  --glass-border-strong:rgba(255,255,255,0.14);
+  --text-hi:#eef1f4;
+  --text-mid:#aab2bd;
+  --text-dim:#6b7280;
+  --teal:#49d9c4;
+  --teal-dim:rgba(73,217,196,0.16);
+  --amber:#f0a93c;
+  --amber-dim:rgba(240,169,60,0.16);
+  --danger:#e5626a;
+  --radius-lg:22px;
+  --radius-md:14px;
+  --radius-sm:9px;
+  font-family:'Inter',sans-serif;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  background:
+    radial-gradient(circle at 15% -10%, rgba(73,217,196,0.07), transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(240,169,60,0.05), transparent 40%),
+    var(--bg-base);
+  color:var(--text-hi);
+  min-height:100vh;
+  padding-bottom:60px;
+}
+.display{font-family:'Space Grotesk',sans-serif;}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* ---------- Top chrome ---------- */
+.topbar{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 28px;
+  background:rgba(13,16,19,0.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--glass-border);
+}
+.brand{display:flex; align-items:center; gap:10px;}
+.brand .mark{
+  width:30px; height:30px; border-radius:8px;
+  background:linear-gradient(135deg, var(--teal), var(--amber));
+  position:relative; overflow:hidden;
+}
+.brand .mark::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.55) 48%, transparent 65%);
+  transform:translateX(-100%);
+  animation:sheen 3.2s ease-in-out infinite;
+}
+@keyframes sheen{ 0%,20%{transform:translateX(-120%);} 55%,100%{transform:translateX(120%);} }
+.brand .word{font-weight:700; font-size:15px; letter-spacing:0.06em;}
+.brand .word span{color:var(--teal);}
+.crumbs{font-size:12.5px; color:var(--text-dim); display:flex; align-items:center; gap:6px;}
+.crumbs .sep{color:var(--text-dim); opacity:0.5;}
+.crumbs .cur{color:var(--text-mid); font-weight:600;}
+.topbar-right{display:flex; align-items:center; gap:8px;}
+.chip-btn{
+  display:flex; align-items:center; gap:6px;
+  padding:8px 14px; border-radius:999px;
+  background:var(--panel-2); border:1px solid var(--glass-border);
+  color:var(--text-mid); font-size:12.5px; font-weight:600;
+  cursor:pointer; transition:all .15s ease;
+}
+.chip-btn:hover{border-color:var(--glass-border-strong); color:var(--text-hi);}
+.chip-btn.primary{background:var(--teal-dim); color:var(--teal); border-color:rgba(73,217,196,0.3);}
+
+/* ---------- Stage ---------- */
+.stage{
+  max-width:1100px; margin:0 auto; padding:44px 24px 20px;
+  display:flex; flex-direction:column; align-items:center; gap:16px;
+}
+
+/* Phone frame (customer) */
+.phone-frame{
+  width:380px; background:#05070a; border-radius:44px; padding:14px;
+  border:1px solid rgba(255,255,255,0.06);
+  box-shadow:0 40px 80px -30px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.03);
+}
+.phone-screen{
+  background:var(--bg-app); border-radius:32px; overflow:hidden;
+  min-height:720px; position:relative; display:flex; flex-direction:column;
+}
+.notch{
+  position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width:120px; height:22px; background:#05070a; border-radius:0 0 16px 16px; z-index:5;
+}
+
+/* Desktop frame (staff/manager/landing) */
+.desktop-frame{
+  width:100%; max-width:980px; border-radius:16px; overflow:hidden;
+  background:var(--bg-app); border:1px solid var(--glass-border);
+  box-shadow:0 40px 80px -35px rgba(0,0,0,0.75);
+}
+.desktop-bar{
+  display:flex; align-items:center; gap:6px; padding:10px 14px;
+  background:var(--panel); border-bottom:1px solid var(--glass-border);
+}
+.desktop-bar .dot{width:9px; height:9px; border-radius:50%;}
+.desktop-bar .dot:nth-child(1){background:#e5626a;}
+.desktop-bar .dot:nth-child(2){background:#f0a93c;}
+.desktop-bar .dot:nth-child(3){background:#49d9c4;}
+.desktop-bar .url{
+  margin-left:10px; font-size:11.5px; color:var(--text-dim);
+  background:var(--panel-2); padding:4px 12px; border-radius:6px; flex:1; max-width:340px;
+}
+.desktop-body{min-height:600px; display:flex;}
+
+.caption{
+  max-width:520px; text-align:center; font-size:12.5px; color:var(--text-dim); line-height:1.5;
+  padding:0 10px;
+}
+.caption b{color:var(--text-mid);}
+
+/* ---------- Generic content styles ---------- */
+.pad{padding:24px;}
+h1.scr{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; letter-spacing:-0.01em;}
+h2.scr{font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600;}
+.muted{color:var(--text-dim); font-size:12.5px;}
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:6px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase;}
+.field input, .field select{
+  width:100%; padding:12px 14px; border-radius:var(--radius-sm);
+  background:var(--panel-2); border:1px solid var(--glass-border); color:var(--text-hi); font-size:13.5px;
+  font-family:'Inter',sans-serif;
+}
+.field input:focus, .field select:focus{outline:none; border-color:var(--teal);}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:12px 20px; border-radius:var(--radius-sm); border:none; cursor:pointer;
+  font-size:13px; font-weight:700; font-family:'Inter',sans-serif; letter-spacing:0.01em;
+  transition:transform .12s ease, filter .12s ease;
+}
+.btn:hover{filter:brightness(1.08);}
+.btn:active{transform:scale(0.98);}
+.btn-primary{background:linear-gradient(135deg, var(--teal), #2fb8a4); color:#06231e; width:100%;}
+.btn-amber{background:linear-gradient(135deg, var(--amber), #d98f22); color:#2b1a03;}
+.btn-ghost{background:var(--panel-2); border:1px solid var(--glass-border); color:var(--text-hi);}
+.btn-block{width:100%;}
+.btn-sm{padding:8px 14px; font-size:12px;}
+.otp-row{display:flex; gap:8px; margin:20px 0;}
+.otp-box{
+  width:52px; height:58px; border-radius:10px; background:var(--panel-2);
+  border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center;
+  font-size:22px; font-weight:700; font-family:'JetBrains Mono',monospace; color:var(--teal);
+}
+.card{
+  background:var(--panel); border:1px solid var(--glass-border); border-radius:var(--radius-md);
+  padding:16px; margin-bottom:12px;
+}
+.row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+.tier-badge{
+  display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+  background:var(--amber-dim); color:var(--amber); font-size:11px; font-weight:700; letter-spacing:0.04em;
+}
+.balance-big{font-family:'JetBrains Mono',monospace; font-size:42px; font-weight:600; color:var(--teal); line-height:1;}
+.nav-bottom{
+  margin-top:auto; display:flex; border-top:1px solid var(--glass-border);
+  background:var(--panel);
+}
+.nav-bottom .item{
+  flex:1; text-align:center; padding:14px 6px; font-size:10.5px; color:var(--text-dim); font-weight:600;
+  cursor:pointer;
+}
+.nav-bottom .item.active{color:var(--teal);}
+.pill{padding:3px 9px; border-radius:999px; font-size:10.5px; font-weight:700;}
+.pill.staff{background:var(--teal-dim); color:var(--teal);}
+.pill.manager{background:var(--amber-dim); color:var(--amber);}
+
+/* Desktop sidebar for staff */
+.side{
+  width:210px; background:var(--panel); border-right:1px solid var(--glass-border);
+  padding:18px 14px; display:flex; flex-direction:column; gap:4px;
+}
+.side .item{
+  padding:10px 12px; border-radius:9px; font-size:12.5px; font-weight:600; color:var(--text-mid);
+  cursor:pointer; display:flex; align-items:center; gap:9px;
+}
+.side .item.active{background:var(--teal-dim); color:var(--teal);}
+.side .item .ico{width:6px; height:6px; border-radius:2px; background:currentColor; opacity:0.6;}
+.main-col{flex:1; padding:22px 26px; overflow:auto;}
+.role-toggle{
+  display:flex; gap:4px; background:var(--panel-2); padding:3px; border-radius:999px; border:1px solid var(--glass-border);
+}
+.role-toggle button{
+  border:none; background:transparent; padding:6px 13px; border-radius:999px; font-size:11.5px; font-weight:700;
+  color:var(--text-dim); cursor:pointer;
+}
+.role-toggle button.on{background:var(--teal); color:#06231e;}
+.role-toggle button.on.manager{background:var(--amber); color:#2b1a03;}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+.stat-card{background:var(--panel); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:16px;}
+.stat-card .num{font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600;}
+table{width:100%; border-collapse:collapse; font-size:12.5px;}
+th{text-align:left; color:var(--text-dim); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--glass-border); text-transform:uppercase; font-size:10.5px; letter-spacing:0.05em;}
+td{padding:10px; border-bottom:1px solid var(--glass-border);}
+.landing-wrap{display:flex; gap:18px; padding:50px 40px; flex-wrap:wrap; justify-content:center;}
+.portal-card{
+  flex:1; min-width:280px; max-width:340px; background:var(--panel); border:1px solid var(--glass-border);
+  border-radius:var(--radius-lg); padding:30px 24px; text-align:center; cursor:pointer;
+  transition:transform .15s ease, border-color .15s ease;
+}
+.portal-card:hover{transform:translateY(-4px); border-color:var(--teal);}
+.portal-card .icon{
+  width:56px; height:56px; margin:0 auto 18px; border-radius:16px;
+  display:flex; align-items:center; justify-content:center; font-size:24px;
+  background:var(--teal-dim);
+}
+.portal-card.manager .icon{background:var(--amber-dim);}
+.portal-card.admin .icon{background:rgba(229,98,106,0.16);}
+
+/* ---------- Sitemap overlay ---------- */
+.overlay{
+  position:fixed; inset:0; background:rgba(6,8,10,0.88); backdrop-filter:blur(6px);
+  z-index:100; display:none; align-items:flex-start; justify-content:center; overflow:auto; padding:60px 20px;
+}
+.overlay.open{display:flex;}
+.map-panel{width:100%; max-width:960px; background:var(--panel); border:1px solid var(--glass-border-strong); border-radius:20px; padding:30px;}
+.map-cols{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:20px;}
+
+.map-col h3{font-family:'Space Grotesk',sans-serif; font-size:13px; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+.map-node{
+  background:var(--panel-2); border:1px solid var(--glass-border); border-radius:10px;
+  padding:10px 12px; font-size:12px; margin-bottom:8px; cursor:pointer; color:var(--text-mid);
+}
+.map-node:hover{border-color:var(--teal); color:var(--text-hi);}
+.close-x{position:absolute; top:22px; right:26px; cursor:pointer; color:var(--text-dim); font-size:20px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"></div>
+    <div class="word">MAGMA <span>AUTOSPA</span></div>
+  </div>
+  <div class="crumbs" id="crumbs"></div>
+  <div class="topbar-right">
+    <button class="chip-btn" onclick="goHome()">↺ Restart</button>
+    <button class="chip-btn primary" onclick="openMap()">⌗ Site map</button>
+  </div>
+</div>
+
+<div class="stage" id="stage"></div>
+
+<div class="overlay" id="mapOverlay">
+  <div class="map-panel" style="position:relative;">
+    <div class="close-x" onclick="closeMap()">✕</div>
+    <h2 class="scr">Full clickthrough map</h2>
+    <p class="muted" style="margin-top:6px;">Jump straight to any screen. Grouped by portal — this is the structure the client walkthrough follows.</p>
+    <div class="map-cols">
+      <div class="map-col">
+        <h3><span style="color:var(--teal)">●</span> Staff portal (desktop)</h3>
+        <div id="mapStaff"></div>
+      </div>
+      <div class="map-col">
+        <h3><span style="color:var(--amber)">●</span> Manager portal (desktop)</h3>
+        <div id="mapManager"></div>
+      </div>
+      <div class="map-col">
+        <h3><span style="color:var(--danger)">●</span> Admin portal (hidden)</h3>
+        <div id="mapAdmin"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- Screen registry ---------------- */
+const SCREENS = {};
+const HISTORY = [];
+let currentRole = "guest"; // guest | staff | manager | admin — only ever set by a real login
+let currentBranch = "Kunnamkulam"; // which branch Admin is currently drilled into
+let staffBranch = "Kunnamkulam"; // which branch the logged-in Staff/Manager belongs to
+function selectBranch(name){ currentBranch = name; }
+
+function reg(id, group, label, builder){ SCREENS[id] = {group, label, builder}; }
+
+function crumbTrail(){
+  return HISTORY.map((id,i)=> (i===HISTORY.length-1)
+    ? `<span class="cur">${SCREENS[id].label}</span>`
+    : `${SCREENS[id].label}<span class="sep">/</span>`).join("");
+}
+function render(){
+  document.getElementById('crumbs').innerHTML = crumbTrail();
+  const id = HISTORY[HISTORY.length-1];
+  const s = SCREENS[id];
+  document.getElementById('stage').innerHTML = s.builder();
+}
+const ROLE_LEVEL = {guest:0, staff:1, manager:2, admin:3};
+const SCREEN_LEVEL = {
+  'staff-dashboard':1, 'staff-customer-profile':1, 'staff-new-customer':1, 'staff-transaction':1, 'staff-redemption':1,
+  'manager-dashboard':2, 'manager-analytics':2, 'manager-staff':2,
+  'admin-dashboard':3, 'admin-branch-new':3, 'admin-branch':3, 'admin-branch-employees':3, 'admin-branch-employee-form':3,
+  'admin-branch-manager':3, 'admin-branch-manager-form':3, 'admin-branch-services':3, 'admin-branch-service-form':3,
+  'admin-branch-offers':3, 'admin-branch-offer-form':3, 'admin-customers':3, 'admin-whatsapp-preview':3
+};
+function isAllowed(id){ const lvl = SCREEN_LEVEL[id]; return lvl===undefined ? true : ROLE_LEVEL[currentRole] >= lvl; }
+function go(id){ if(!isAllowed(id)) id='access-denied'; HISTORY.push(id); render(); window.scrollTo({top:0,behavior:'smooth'}); }
+function goHome(){ HISTORY.length = 0; HISTORY.push('entry'); render(); }
+function goBack(){ if(HISTORY.length>1){ HISTORY.pop(); render(); } }
+function setRole(r){ currentRole = r; render(); }
+function openMap(){
+  const groups = {staff:[], manager:[], admin:[]};
+  Object.entries(SCREENS).forEach(([id,s])=>{ if(groups[s.group]) groups[s.group].push([id,s.label]); });
+  document.getElementById('mapStaff').innerHTML = groups.staff.map(([id,l])=>`<div class="map-node" onclick="jumpTo('${id}')">${l}</div>`).join("");
+  document.getElementById('mapManager').innerHTML = groups.manager.map(([id,l])=>`<div class="map-node" onclick="jumpTo('${id}')">${l}</div>`).join("");
+  document.getElementById('mapAdmin').innerHTML = groups.admin.map(([id,l])=>`<div class="map-node" onclick="jumpTo('${id}')">${l}</div>`).join("");
+  document.getElementById('mapOverlay').classList.add('open');
+}
+function closeMap(){ document.getElementById('mapOverlay').classList.remove('open'); }
+function jumpTo(id){ closeMap(); HISTORY.length=0; HISTORY.push('entry'); if(id!=='entry') HISTORY.push(isAllowed(id)?id:'access-denied'); render(); }
+
+function phoneFrame(inner){
+  return `<div class="phone-frame"><div class="phone-screen"><div class="notch"></div>${inner}</div></div>`;
+}
+function desktopFrame(inner, url){
+  return `<div class="desktop-frame">
+    <div class="desktop-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="url">${url}</div></div>
+    <div class="desktop-body">${inner}</div>
+  </div>`;
+}
+function backRow(){
+  return HISTORY.length>1 ? `<div style="margin-bottom:12px;"><span class="muted" style="cursor:pointer" onclick="goBack()">← Back</span></div>` : '';
+}
+
+/* ============ ENTRY ============ */
+reg('entry','hidden','Sign in', ()=>`
+  ${desktopFrame(`
+    <div style="width:100%;">
+      <div class="landing-wrap" style="padding-top:64px;">
+        <div class="portal-card" onclick="go('staff-login')">
+          <div class="icon">🧰</div>
+          <h2 class="scr">Staff</h2>
+          <p class="muted" style="margin-top:8px;">Log in with your Staff ID to look up customers, log services, and process redemptions at billing.</p>
+          <div class="btn btn-primary" style="margin-top:18px;">Log in as Staff</div>
+        </div>
+        <div class="portal-card manager" onclick="go('manager-login')">
+          <div class="icon">🗝️</div>
+          <h2 class="scr">Manager</h2>
+          <p class="muted" style="margin-top:8px;">Log in with your Manager ID for everything staff can do, plus branch analytics and staff management.</p>
+          <div class="btn btn-amber" style="margin-top:18px;">Log in as Manager</div>
+        </div>
+        <div class="portal-card admin" onclick="go('admin-login')">
+          <div class="icon">🛡️</div>
+          <h2 class="scr">Admin</h2>
+          <p class="muted" style="margin-top:8px;">Log in with your Admin ID for full access across all branches — services, pricing, offers, and staff.</p>
+          <div class="btn" style="background:var(--danger); color:#2b0d0f; margin-top:18px;">Log in as Admin</div>
+        </div>
+      </div>
+    </div>
+  `,'magma-autospa.in')}
+  <p class="caption">This is an internal tool — there's no public or customer-facing side. Customers are served entirely in person; staff log their visit and redeem rewards right here at billing, and the customer gets their bill and points total by <b>WhatsApp</b> afterward. All three roles sign in from this same screen, each with their own ID and their own permissions.</p>
+`);
+
+/* ============ STAFF LOGIN ============ */
+reg('staff-login','staff','Staff login', ()=>`
+  ${desktopFrame(`
+    <div class="main-col" style="max-width:380px; margin:60px auto;">
+      ${backRow()}
+      <span class="pill staff">Staff sign in</span>
+      <h1 class="scr" style="margin-top:10px;">Welcome back</h1>
+      <p class="muted" style="margin:6px 0 22px;">Select your branch to continue</p>
+      <div class="field"><label>Branch</label>
+        <select id="staffBranchSelect"><option>Kunnamkulam</option><option>Thrissur</option></select>
+      </div>
+      <div class="field"><label>Staff ID</label><input value="MAG-0142"></div>
+      <div class="field"><label>Password</label><input type="password" value="••••••••"></div>
+      <div class="btn btn-primary" onclick="const el=document.getElementById('staffBranchSelect'); staffBranch=el?el.value:'Kunnamkulam'; setRole('staff'); go('staff-dashboard')">Log in</div>
+      <p class="muted" style="margin-top:14px;">Not a staff member? <span style="color:var(--amber); cursor:pointer;" onclick="go('manager-login')">Log in as Manager</span></p>
+    </div>
+  `,'magma-autospa.in/staff/login')}
+  <p class="caption">Staff sign in with a <b>Staff ID</b> tied to one branch — every screen from here on shows that branch's name, so it's always clear whose numbers you're looking at.</p>
+`);
+
+/* ============ MANAGER LOGIN ============ */
+reg('manager-login','manager','Manager login', ()=>`
+  ${desktopFrame(`
+    <div class="main-col" style="max-width:380px; margin:60px auto;">
+      ${backRow()}
+      <span class="pill manager">Manager sign in</span>
+      <h1 class="scr" style="margin-top:10px;">Welcome back</h1>
+      <p class="muted" style="margin:6px 0 22px;">Select your branch to continue</p>
+      <div class="field"><label>Branch</label>
+        <select id="managerBranchSelect"><option>Kunnamkulam</option><option>Thrissur</option></select>
+      </div>
+      <div class="field"><label>Manager ID</label><input value="MGR-0031"></div>
+      <div class="field"><label>Password</label><input type="password" value="••••••••"></div>
+      <div class="btn btn-amber" onclick="const el=document.getElementById('managerBranchSelect'); staffBranch=el?el.value:'Kunnamkulam'; setRole('manager'); go('staff-dashboard')">Log in</div>
+      <p class="muted" style="margin-top:14px;">Not a manager? <span style="color:var(--teal); cursor:pointer;" onclick="go('staff-login')">Log in as Staff</span></p>
+    </div>
+  `,'magma-autospa.in/manager/login')}
+  <p class="caption">Managers sign in with a separate <b>Manager ID</b>, tied to one branch — analytics and staff management always reflect that branch alone.</p>
+`);
+
+/* ============ STAFF/MANAGER DASHBOARD (role-aware) ============ */
+function sideNav(active){
+  const items = [
+    ['staff-dashboard','⌂','Dashboard','both'],
+    ['staff-customer-profile','⌕','Find customer','both'],
+    ['staff-transaction','＋','New transaction','both'],
+    ['staff-redemption','◈','Redemptions','both'],
+    ['manager-analytics','▤','Branch analytics','manager'],
+    ['manager-staff','◎','Manage staff','manager'],
+  ];
+  return items.filter(i=>i[3]==='both'||i[3]===currentRole).map(i=>
+    `<div class="item ${i[0]===active?'active':''}" onclick="go('${i[0]}')"><span class="ico"></span>${i[2]}</div>`
+  ).join('');
+}
+function roleToggleHTML(){
+  if(currentRole==='admin') return `<span class="pill" style="background:rgba(229,98,106,0.16); color:var(--danger);">🛡️ Admin account</span>`;
+  return currentRole==='manager'
+    ? `<span class="pill manager">🗝️ Manager account</span>`
+    : `<span class="pill staff">🧰 Staff account · Manager tools locked</span>`;
+}
+
+/* ============ ACCESS DENIED ============ */
+reg('access-denied','hidden','Access restricted', ()=>`
+  ${desktopFrame(`
+    <div class="main-col" style="max-width:420px; margin:90px auto; text-align:center;">
+      <div style="font-size:34px;">🔒</div>
+      <h1 class="scr" style="margin-top:16px;">This area is locked</h1>
+      <p class="muted" style="margin-top:10px; line-height:1.6;">This page needs a higher-permission account than the one you're signed in with. Sign in with the right ID to see it.</p>
+      <div class="btn btn-primary" style="margin-top:22px; max-width:220px; margin:22px auto 0;" onclick="jumpTo('entry')">Back to start</div>
+    </div>
+  `,'magma-autospa.in')}
+  <p class="caption">This is the real lock, not just a hidden menu — even a direct link to a restricted screen bounces an under-permissioned account back out.</p>
+`);
+
+reg('staff-dashboard','staff','Dashboard', ()=>`
+  ${desktopFrame(`
+    <div class="side">${sideNav('staff-dashboard')}</div>
+    <div class="main-col">
+      <div class="row">
+        <div><h1 class="scr">Good evening, ${currentRole==='manager'?'Ravi (Manager)':'Divya'}</h1><div style="margin-top:6px; display:flex; gap:6px;"><span class="pill ${currentRole}">${currentRole==='manager'?'Manager':'Staff'}</span><span class="pill" style="background:var(--panel-2); color:var(--text-mid); border:1px solid var(--glass-border);">${staffBranch} Branch</span></div></div>
+        ${roleToggleHTML()}
+      </div>
+      <div class="field" style="margin-top:20px; max-width:420px;"><input placeholder="Search customer by name or phone number…"></div>
+      <div class="grid3" style="margin-top:18px;">
+        <div class="stat-card"><p class="muted">Check-ins today</p><div class="num">18</div></div>
+        <div class="stat-card"><p class="muted">Transactions today</p><div class="num">15</div></div>
+        <div class="stat-card"><p class="muted">${currentRole==='manager'?'Branch revenue today':'Points issued today'}</p><div class="num">${currentRole==='manager'?(staffBranch==='Thrissur'?'₹17,950':'₹18,400'):'2,760'}</div></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <div class="btn btn-primary" style="max-width:200px;" onclick="go('staff-customer-profile')">New customer</div>
+        <div class="btn btn-ghost" style="max-width:200px;" onclick="go('staff-transaction')">Log a service</div>
+        ${currentRole==='manager'?'<div class="btn btn-amber" style="max-width:200px;" onclick="go(\'manager-analytics\')">View analytics</div>':''}
+      </div>
+      <h2 class="scr" style="margin-top:26px; margin-bottom:10px; font-size:13px;">Recent check-ins</h2>
+      <table>
+        <tr><th>Customer</th><th>Service</th><th>Staff</th><th>Points</th></tr>
+        ${[['Anjali Menon','Premium Wash + Detail','Divya','+180'],['Suresh Kumar','Basic Wash','Nithin','+60'],['Fathima Roy','Ceramic Coating (redeemed)','Divya','−1500']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="mono">${r[3]}</td></tr>`).join('')}
+      </table>
+    </div>
+  `,'magma-autospa.in/staff/dashboard')}
+  <p class="caption">The same dashboard shell is shared, but what's inside it is decided entirely by <b>who logged in</b>. A Staff account never sees the Manager-only tools in the sidebar — try opening this prototype via the Manager login to compare.</p>
+`);
+
+reg('manager-dashboard','manager','Manager dashboard', ()=> SCREENS['staff-dashboard'].builder());
+
+/* ============ CUSTOMER LOOKUP (staff side) ============ */
+reg('staff-customer-profile','staff','Customer profile (staff view)', ()=>`
+  ${desktopFrame(`
+    <div class="side">${sideNav('staff-customer-profile')}</div>
+    <div class="main-col">
+      <div class="row">${backRow()}<div style="display:flex; gap:8px; align-items:center;"><span class="pill" style="background:var(--panel-2); color:var(--text-mid); border:1px solid var(--glass-border);">${staffBranch} Branch</span>${roleToggleHTML()}</div></div>
+      <div class="row" style="margin-top:6px;">
+        <div><h1 class="scr">Anjali Menon</h1><p class="muted">+91 98470 XXXXX · KL-45 AB 3021</p></div>
+        <span class="tier-badge">★ Gold</span>
+      </div>
+      <div class="grid3" style="margin-top:16px;">
+        <div class="stat-card"><p class="muted">Loyalty balance</p><div class="num" style="color:var(--teal);">2,140</div></div>
+        <div class="stat-card"><p class="muted">Lifetime visits</p><div class="num">27</div></div>
+        <div class="stat-card"><p class="muted">Member since</p><div class="num" style="font-size:16px;">Feb 2024</div></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <div class="btn btn-primary" style="max-width:200px;" onclick="go('staff-transaction')">New transaction</div>
+        <div class="btn btn-amber" style="max-width:200px;" onclick="go('staff-redemption')">Redeem reward</div>
+      </div>
+      <h2 class="scr" style="margin-top:24px; margin-bottom:10px; font-size:13px;">Visit history</h2>
+      <table>
+        <tr><th>Date</th><th>Service</th><th>Points</th></tr>
+        <tr><td>4 days ago</td><td>Premium Wash + Interior Detail</td><td class="mono" style="color:var(--teal)">+180</td></tr>
+        <tr><td>19 days ago</td><td>Basic Wash</td><td class="mono" style="color:var(--teal)">+60</td></tr>
+        <tr><td>1 month ago</td><td>Ceramic Coating (redeemed)</td><td class="mono" style="color:var(--danger)">−1,500</td></tr>
+      </table>
+    </div>
+  `,'magma-autospa.in/staff/customers/anjali-menon')}
+  <p class="caption">What a normal staff member sees when they pull up a customer — enough to serve them well, without branch-wide numbers a manager needs.</p>
+`);
+
+reg('staff-new-customer','staff','Add new customer', ()=>`
+  ${desktopFrame(`
+    <div class="side">${sideNav('staff-customer-profile')}</div>
+    <div class="main-col" style="max-width:460px;">
+      ${backRow()}
+      <h1 class="scr">Add new customer</h1>
+      <div class="field" style="margin-top:18px;"><label>Full name</label><input placeholder="e.g. Rahul Pillai"></div>
+      <div class="field"><label>Mobile number</label><input placeholder="+91"></div>
+      <div class="field"><label>Vehicle number &amp; model</label><input placeholder="KL-XX XX XXXX · Model"></div>
+      <div class="field"><label>Date of birth (optional — for birthday rewards)</label><input placeholder="DD/MM/YYYY"></div>
+      <div class="btn btn-primary" onclick="go('staff-customer-profile')">Create profile</div>
+    </div>
+  `,'magma-autospa.in/staff/customers/new')}
+`);
+
+/* ============ TRANSACTION ============ */
+reg('staff-transaction','staff','New transaction', ()=>`
+  ${desktopFrame(`
+    <div class="side">${sideNav('staff-transaction')}</div>
+    <div class="main-col" style="max-width:520px;">
+      ${backRow()}
+      <h1 class="scr">New transaction</h1>
+      <p class="muted" style="margin:6px 0 18px;">Anjali Menon · KL-45 AB 3021 · ${staffBranch} Branch</p>
+      <label class="muted" style="font-size:11.5px; text-transform:uppercase; font-weight:600;">Select services</label>
+      <div style="margin-top:8px;">
+        ${[['Exterior Wash','₹300',true],['Interior Vacuum','₹200',true],['Ceramic Coating Top-up','₹1,200',false]].map(r=>`
+          <div class="card row" style="cursor:default;"><span><input type="checkbox" ${r[2]?'checked':''} style="margin-right:10px;">${r[0]}</span><span class="mono">${r[1]}</span></div>
+        `).join('')}
+      </div>
+      <div class="field" style="margin-top:14px;"><label>Payment method</label>
+        <select><option>UPI</option><option>Cash</option><option>Card</option></select>
+      </div>
+      <div class="card" style="margin-top:6px; background:var(--teal-dim); border-color:rgba(73,217,196,0.3);">
+        <div class="row"><span>Total</span><span class="mono">₹500</span></div>
+        <div class="row" style="margin-top:4px;"><span>Points to be earned</span><span class="mono" style="color:var(--teal);">+50</span></div>
+      </div>
+      <div class="btn btn-primary" style="margin-top:16px;" onclick="go('staff-customer-profile')">Complete transaction</div>
+      <p class="muted" style="margin-top:10px; text-align:center;">💬 Bill and updated point balance are sent to the customer on WhatsApp automatically.</p>
+    </div>
+  `,'magma-autospa.in/staff/transactions/new')}
+  <p class="caption">Maps to the PRD's <b>Service Transactions</b> flow: select service → select payment → generate points → update ledger, all on one screen.</p>
+`);
+
+/* ============ REDEMPTION (OTP) ============ */
+reg('staff-redemption','staff','Redemption — OTP', ()=>`
+  ${desktopFrame(`
+    <div class="side">${sideNav('staff-redemption')}</div>
+    <div class="main-col" style="max-width:460px;">
+      ${backRow()}
+      <h1 class="scr">Redeem reward</h1>
+      <p class="muted" style="margin:6px 0 18px;">Anjali Menon · Balance: 2,140 pts · ${staffBranch} Branch</p>
+      <div class="field"><label>Reward</label>
+        <select><option>Interior Vacuum + Shine — 800 pts</option><option>Free Exterior Wash — 500 pts</option></select>
+      </div>
+      <div class="btn btn-ghost btn-block">Send OTP via WhatsApp</div>
+      <p class="muted" style="margin-top:16px; margin-bottom:6px;">Enter the 4-digit code sent to the customer's WhatsApp</p>
+      <div class="otp-row">
+        <div class="otp-box">7</div><div class="otp-box">2</div><div class="otp-box">9</div><div class="otp-box">4</div>
+      </div>
+      <div class="btn btn-amber btn-block" onclick="go('staff-customer-profile')">Confirm redemption</div>
+    </div>
+  `,'magma-autospa.in/staff/redeem')}
+  <p class="caption">This is the counter-side half of the OTP loop — since there's no customer app anymore, the code now arrives on <b>WhatsApp</b> instead.</p>
+`);
+
+/* ============ MANAGER-ONLY SCREENS ============ */
+reg('manager-analytics','manager','Branch analytics', ()=>{ return `
+  ${desktopFrame(`
+    <div class="side">${sideNav('manager-analytics')}</div>
+    <div class="main-col">
+      <div class="row">${backRow()}<div style="display:flex; gap:8px;"><span class="pill" style="background:var(--panel-2); color:var(--text-mid); border:1px solid var(--glass-border);">${staffBranch} Branch</span><span class="pill manager">Manager only</span></div></div>
+      <h1 class="scr" style="margin-top:10px;">Branch analytics — ${staffBranch}</h1>
+      <div class="grid3" style="margin-top:16px;">
+        <div class="stat-card"><p class="muted">Revenue this month</p><div class="num" style="color:var(--amber);">${staffBranch==='Thrissur'?'₹4,82,200':'₹4,82,000'}</div></div>
+        <div class="stat-card"><p class="muted">Active loyalty members</p><div class="num">${staffBranch==='Thrissur'?'1,088':'1,204'}</div></div>
+        <div class="stat-card"><p class="muted">Redemption rate</p><div class="num">${staffBranch==='Thrissur'?'27%':'31%'}</div></div>
+      </div>
+      <h2 class="scr" style="margin-top:22px; margin-bottom:10px; font-size:13px;">Manager performance — ${staffBranch}</h2>
+      <table>
+        <tr><th>Manager</th><th>Branch</th><th>Transactions</th><th>Revenue</th></tr>
+        <tr><td>${staffBranch==='Thrissur'?'Deepa Suresh':'Ravi Nair'}</td><td>${staffBranch}</td><td>${staffBranch==='Thrissur'?'119':'142'}</td><td class="mono">${staffBranch==='Thrissur'?'₹94,200':'₹1,08,400'}</td></tr>
+      </table>
+      <h2 class="scr" style="margin-top:22px; margin-bottom:10px; font-size:13px;">Most redeemed rewards — ${staffBranch}</h2>
+      <table>
+        <tr><th>Reward</th><th>Redemptions</th><th>Points liability</th></tr>
+        <tr><td>Interior Vacuum + Shine</td><td>64</td><td class="mono">51,200</td></tr>
+        <tr><td>Free Exterior Wash</td><td>58</td><td class="mono">29,000</td></tr>
+      </table>
+    </div>
+  `,'magma-autospa.in/staff/analytics')}
+  <p class="caption">Every figure here — including the manager performance row — is scoped to <b>${staffBranch}</b> alone. Log in via the other branch to see these numbers change.</p>
+`;});
+
+reg('manager-staff','manager','Manage staff', ()=>{ return `
+  ${desktopFrame(`
+    <div class="side">${sideNav('manager-staff')}</div>
+    <div class="main-col">
+      <div class="row">${backRow()}<div style="display:flex; gap:8px;"><span class="pill" style="background:var(--panel-2); color:var(--text-mid); border:1px solid var(--glass-border);">${staffBranch} Branch</span><span class="pill manager">Manager only</span></div></div>
+      <h1 class="scr" style="margin-top:10px;">Branch staff — ${staffBranch}</h1>
+      <div class="btn btn-primary" style="max-width:160px; margin:14px 0 16px;">+ Add staff</div>
+      <table>
+        <tr><th>Name</th><th>Staff ID</th><th>Branch</th><th>Role</th><th>Status</th></tr>
+        ${(staffBranch==='Thrissur'
+          ? [['Aravind Das','MAG-0205','Staff'],['Meera Thomas','MAG-0212','Staff'],['Deepa Suresh','MGR-0044','Manager']]
+          : [['Divya Krishnan','MAG-0142','Staff'],['Nithin Varma','MAG-0156','Staff'],['Ravi Nair','MGR-0031','Manager']]
+        ).map(r=>`<tr><td>${r[0]}</td><td class="mono">${r[1]}</td><td>${staffBranch}</td><td>${r[2]}</td><td style="color:var(--teal);">Active</td></tr>`).join('')}
+      </table>
+    </div>
+  `,'magma-autospa.in/staff/manage-staff')}
+  <p class="caption">This roster is scoped to <b>${staffBranch}</b> — a Manager here maintains their own branch's staff records, not another branch's.</p>
+`;});
+
+/* ============ ADMIN PORTAL ============ */
+function adminSideNav(active){
+  const items = [
+    ['admin-dashboard','⌂','Overview & branches'],
+    ['admin-customers','💬','Customers'],
+  ];
+  return items.map(i=>`<div class="item ${i[0]===active?'active':''}" onclick="go('${i[0]}')"><span class="ico"></span>${i[2]}</div>`).join('');
+}
+function adminBranchSideNav(active){
+  const items = [
+    ['admin-branch','⌂','Branch overview'],
+    ['admin-branch-employees','🧰','Employees'],
+    ['admin-branch-manager','🗝️','Manager'],
+    ['admin-branch-services','⚙','Services & pricing'],
+    ['admin-branch-offers','◈','Offers & combos'],
+  ];
+  return `<div class="item" onclick="go('admin-dashboard')" style="color:var(--text-dim); margin-bottom:10px;">← All branches</div>` +
+    items.map(i=>`<div class="item ${i[0]===active?'active':''}" onclick="go('${i[0]}')"><span class="ico"></span>${i[2]}</div>`).join('');
+}
+function isKnownBranch(){ return currentBranch==='Kunnamkulam' || currentBranch==='Thrissur'; }
+function branchTag(){ return `<span class="pill" style="background:rgba(229,98,106,0.16); color:var(--danger);">${currentBranch}</span>`; }
+
+reg('admin-login','admin','Admin login', ()=>`
+  ${desktopFrame(`
+    <div class="main-col" style="max-width:380px; margin:60px auto;">
+      ${backRow()}
+      <span class="pill" style="background:rgba(229,98,106,0.16); color:var(--danger);">Admin sign in</span>
+      <h1 class="scr" style="margin-top:10px;">System Admin</h1>
+      <p class="muted" style="margin:6px 0 22px;">Full access across all branches</p>
+      <div class="field"><label>Admin ID</label><input value="ADM-001"></div>
+      <div class="field"><label>Password</label><input type="password" value="••••••••"></div>
+      <div class="btn" style="background:var(--danger); color:#2b0d0f; width:100%;" onclick="setRole('admin'); go('admin-dashboard')">Log in</div>
+    </div>
+  `,'magma-autospa.in/admin/login')}
+  <p class="caption">Admin has its own visible card on the landing page, right alongside Staff and Manager — still gated by its own ID and password, since it's the highest-privilege account in the system.</p>
+`);
+
+reg('admin-dashboard','admin','Admin overview', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminSideNav('admin-dashboard')}</div>
+    <div class="main-col">
+      <div class="row">${backRow()}<span class="pill" style="background:rgba(229,98,106,0.16); color:var(--danger);">🛡️ Full access</span></div>
+      <h1 class="scr" style="margin-top:4px;">All branches</h1>
+      <div class="grid3" style="margin-top:16px;">
+        <div class="stat-card"><p class="muted">Revenue this month (all branches)</p><div class="num" style="color:var(--danger);">₹9,64,200</div></div>
+        <div class="stat-card"><p class="muted">Total customers</p><div class="num">3,412</div></div>
+        <div class="stat-card"><p class="muted">Total points liability</p><div class="num">4,86,900</div></div>
+      </div>
+      <div class="row" style="margin-top:22px; margin-bottom:10px;">
+        <h2 class="scr" style="font-size:13px;">Branches</h2>
+        <div class="btn" style="background:var(--danger); color:#2b0d0f; max-width:150px;" onclick="go('admin-branch-new')">+ Add branch</div>
+      </div>
+      <table>
+        <tr><th>Branch</th><th>Manager</th><th>Staff</th><th>Revenue (month)</th><th></th></tr>
+        <tr onclick="selectBranch('Kunnamkulam'); go('admin-branch')" style="cursor:pointer;"><td>Kunnamkulam</td><td>Ravi Nair</td><td>4</td><td class="mono">₹4,82,000</td><td class="muted">Manage →</td></tr>
+        <tr onclick="selectBranch('Thrissur'); go('admin-branch')" style="cursor:pointer;"><td>Thrissur</td><td>Deepa Suresh</td><td>5</td><td class="mono">₹4,82,200</td><td class="muted">Manage →</td></tr>
+      </table>
+    </div>
+  `,'magma-autospa.in/admin/dashboard')}
+  <p class="caption">Click any branch to open its own control panel — employees, manager, services & pricing, and offers, all scoped to that branch alone.</p>
+`);
+
+reg('admin-branch-new','admin','Add new branch', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminSideNav('admin-dashboard')}</div>
+    <div class="main-col" style="max-width:460px;">
+      ${backRow()}
+      <h1 class="scr">Add a new branch</h1>
+      <div class="field" style="margin-top:18px;"><label>Branch name</label><input id="newBranchNameInput" placeholder="e.g. Guruvayur Branch"></div>
+      <div class="field"><label>Address</label><input placeholder="Street, town, PIN"></div>
+      <div class="field"><label>Contact number</label><input placeholder="+91"></div>
+      <div class="field"><label>Opening date</label><input placeholder="DD/MM/YYYY"></div>
+      <div class="btn" style="background:var(--danger); color:#2b0d0f;" onclick="const el=document.getElementById('newBranchNameInput'); selectBranch(el&&el.value?el.value:'New Branch'); go('admin-branch')">Create branch</div>
+    </div>
+  `,'magma-autospa.in/admin/branches/new')}
+  <p class="caption">The moment a branch is created it gets the exact same control panel as every other branch — Employees, Manager, Services &amp; Pricing, Offers &amp; Combos — just empty, ready to be filled in.</p>
+`);
+
+reg('admin-branch','admin','Branch overview', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch')}</div>
+    <div class="main-col">
+      <div class="row">${branchTag()}${isKnownBranch()?'':'<span class="pill staff">New branch</span>'}</div>
+      <h1 class="scr" style="margin-top:10px;">${currentBranch}</h1>
+      ${isKnownBranch()?`
+        <div class="grid3" style="margin-top:16px;">
+          <div class="stat-card"><p class="muted">Revenue this month</p><div class="num" style="color:var(--amber);">${currentBranch==='Kunnamkulam'?'₹4,82,000':'₹4,82,200'}</div></div>
+          <div class="stat-card"><p class="muted">Employees</p><div class="num">${currentBranch==='Kunnamkulam'?'4':'5'}</div></div>
+          <div class="stat-card"><p class="muted">Active offers</p><div class="num">${currentBranch==='Kunnamkulam'?'3':'1'}</div></div>
+        </div>
+      `:`
+        <div class="card" style="margin-top:16px; background:var(--teal-dim); border-color:rgba(73,217,196,0.3);">
+          <p style="font-size:12.5px;">This branch was just created. Head to <b>Employees</b> to add staff, <b>Manager</b> to assign someone to run it, <b>Services &amp; Pricing</b> to set what it offers, and <b>Offers &amp; Combos</b> for any promotions.</p>
+        </div>
+      `}
+      <h2 class="scr" style="margin-top:22px; margin-bottom:10px; font-size:13px;">Branch details</h2>
+      <div class="field" style="max-width:420px;"><label>Branch name</label><input value="${currentBranch}"></div>
+      <div class="field" style="max-width:420px;"><label>Address</label><input value="${isKnownBranch()?'MG Road, '+currentBranch+', Kerala':''}" placeholder="Street, town, PIN"></div>
+      <div class="field" style="max-width:420px;"><label>Contact number</label><input value="${isKnownBranch()?'+91 87XXXXXXXX':''}" placeholder="+91"></div>
+      <div class="btn btn-ghost" style="max-width:200px;">Save branch details</div>
+    </div>
+  `,'magma-autospa.in/admin/branches')}
+  <p class="caption">Every section in the left sidebar edits only <b>${currentBranch}</b> — nothing here touches any other branch's staff, pricing, or offers.</p>
+`);
+
+/* ---- Employees ---- */
+reg('admin-branch-employees','admin','Branch employees', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-employees')}</div>
+    <div class="main-col">
+      <div class="row">${branchTag()}<div class="btn" style="background:var(--danger); color:#2b0d0f; max-width:170px;" onclick="go('admin-branch-employee-form')">+ Add employee</div></div>
+      <h1 class="scr" style="margin-top:10px;">Employees — ${currentBranch}</h1>
+      ${isKnownBranch()?`
+        <table style="margin-top:14px;">
+          <tr><th>Name</th><th>Staff ID</th><th>Status</th><th></th></tr>
+          ${(currentBranch==='Kunnamkulam'
+            ? [['Divya Krishnan','MAG-0142'],['Nithin Varma','MAG-0156'],['Ajay Menon','MAG-0163'],['Sreelakshmi P','MAG-0171']]
+            : [['Aravind Das','MAG-0205'],['Meera Thomas','MAG-0212'],['Vishnu Prasad','MAG-0219'],['Anu Rajan','MAG-0226'],['Kiran Babu','MAG-0233']]
+          ).map(r=>`<tr><td>${r[0]}</td><td class="mono">${r[1]}</td><td style="color:var(--teal);">Active</td><td><span class="muted" style="cursor:pointer;" onclick="go('admin-branch-employee-form')">Edit</span></td></tr>`).join('')}
+        </table>
+      `:`<div class="card" style="margin-top:14px;"><p class="muted">No employees added yet for ${currentBranch}. Use "+ Add employee" to bring on the first one.</p></div>`}
+    </div>
+  `,'magma-autospa.in/admin/branches/employees')}
+  <p class="caption">Adding, editing, or deactivating an employee here only ever affects ${currentBranch} — the same person shown here won't appear at another branch.</p>
+`);
+
+reg('admin-branch-employee-form','admin','Add / edit employee', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-employees')}</div>
+    <div class="main-col" style="max-width:460px;">
+      ${backRow()}
+      <h1 class="scr">Employee — ${currentBranch}</h1>
+      <div class="field" style="margin-top:18px;"><label>Full name</label><input placeholder="e.g. Rahul Pillai"></div>
+      <div class="field"><label>Staff ID</label><input placeholder="Auto-generated, e.g. MAG-0247"></div>
+      <div class="field"><label>Phone number</label><input placeholder="+91"></div>
+      <div class="field"><label>Temporary password</label><input placeholder="Sent to employee on first login"></div>
+      <div style="display:flex; gap:10px;">
+        <div class="btn" style="background:var(--danger); color:#2b0d0f;" onclick="go('admin-branch-employees')">Save employee</div>
+        <div class="btn btn-ghost" onclick="go('admin-branch-employees')">Cancel</div>
+      </div>
+    </div>
+  `,'magma-autospa.in/admin/branches/employees/edit')}
+`);
+
+/* ---- Manager ---- */
+reg('admin-branch-manager','admin','Branch manager', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-manager')}</div>
+    <div class="main-col" style="max-width:480px;">
+      <div class="row">${branchTag()}</div>
+      <h1 class="scr" style="margin-top:10px;">Manager — ${currentBranch}</h1>
+      ${isKnownBranch()?`
+        <div class="card" style="margin-top:16px;">
+          <div class="row"><span><b>${currentBranch==='Kunnamkulam'?'Ravi Nair':'Deepa Suresh'}</b></span><span class="pill manager">Manager</span></div>
+          <p class="muted" style="margin-top:6px;">ID: ${currentBranch==='Kunnamkulam'?'MGR-0031':'MGR-0044'} · Assigned to ${currentBranch}</p>
+        </div>
+        <div class="btn" style="background:var(--danger); color:#2b0d0f; max-width:200px; margin-top:10px;" onclick="go('admin-branch-manager-form')">Change manager</div>
+      `:`
+        <div class="card" style="margin-top:16px;"><p class="muted">No manager assigned to ${currentBranch} yet.</p></div>
+        <div class="btn" style="background:var(--danger); color:#2b0d0f; max-width:200px; margin-top:10px;" onclick="go('admin-branch-manager-form')">Assign a manager</div>
+      `}
+    </div>
+  `,'magma-autospa.in/admin/branches/manager')}
+  <p class="caption">A branch has exactly one Manager account at a time — reassigning here immediately hands the branch's analytics and staff controls to whoever is entered next.</p>
+`);
+
+reg('admin-branch-manager-form','admin','Assign / edit manager', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-manager')}</div>
+    <div class="main-col" style="max-width:460px;">
+      ${backRow()}
+      <h1 class="scr">Manager — ${currentBranch}</h1>
+      <div class="field" style="margin-top:18px;"><label>Full name</label><input placeholder="e.g. Ravi Nair"></div>
+      <div class="field"><label>Manager ID</label><input placeholder="Auto-generated, e.g. MGR-0058"></div>
+      <div class="field"><label>Phone number</label><input placeholder="+91"></div>
+      <div class="field"><label>Temporary password</label><input placeholder="Sent to manager on first login"></div>
+      <div style="display:flex; gap:10px;">
+        <div class="btn" style="background:var(--danger); color:#2b0d0f;" onclick="go('admin-branch-manager')">Save manager</div>
+        <div class="btn btn-ghost" onclick="go('admin-branch-manager')">Cancel</div>
+      </div>
+    </div>
+  `,'magma-autospa.in/admin/branches/manager/edit')}
+`);
+
+/* ---- Services & pricing ---- */
+reg('admin-branch-services','admin','Branch services & pricing', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-services')}</div>
+    <div class="main-col">
+      <div class="row">${branchTag()}<div class="btn" style="background:var(--danger); color:#2b0d0f; max-width:160px;" onclick="go('admin-branch-service-form')">+ Add service</div></div>
+      <h1 class="scr" style="margin-top:10px;">Services &amp; pricing — ${currentBranch}</h1>
+      ${isKnownBranch()?`
+        <table style="margin-top:14px;">
+          <tr><th>Service</th><th>Category</th><th>Price</th><th>Points earned</th><th></th></tr>
+          ${[['Basic Exterior Wash','Wash','₹300','30'],['Premium Wash + Interior Detail','Detailing','₹800','80'],['Full Interior Detailing','Detailing','₹1,200','120'],['Ceramic Coating','Coating',currentBranch==='Kunnamkulam'?'₹4,500':'₹4,800','450'],['Underbody Wash','Wash','₹250','25'],['Engine Bay Cleaning','Detailing','₹400','40']].map(r=>`
+            <tr><td>${r[0]}</td><td>${r[1]}</td><td class="mono">${r[2]}</td><td class="mono">${r[3]}</td><td><span class="muted" style="cursor:pointer;" onclick="go('admin-branch-service-form')">Edit</span></td></tr>
+          `).join('')}
+        </table>
+      `:`<div class="card" style="margin-top:14px;"><p class="muted">No services set up yet for ${currentBranch}. Add its first service to start taking bookings here.</p></div>`}
+    </div>
+  `,'magma-autospa.in/admin/branches/services')}
+  <p class="caption">Prices can differ branch to branch — ${currentBranch==='Thrissur'?"notice Ceramic Coating already costs more here than in Kunnamkulam":"try opening Thrissur's services from the branch list to compare pricing"}.</p>
+`);
+
+reg('admin-branch-service-form','admin','Add / edit service', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-services')}</div>
+    <div class="main-col" style="max-width:460px;">
+      ${backRow()}
+      <h1 class="scr">Service — ${currentBranch}</h1>
+      <div class="field" style="margin-top:18px;"><label>Service name</label><input value="Premium Wash + Interior Detail"></div>
+      <div class="field"><label>Category</label>
+        <select><option>Wash</option><option selected>Detailing</option><option>Coating</option><option>Polishing</option></select>
+      </div>
+      <div class="field"><label>Price at this branch (₹)</label><input value="800"></div>
+      <div class="field"><label>Points earned per visit</label><input value="80"></div>
+      <div class="field"><label>Estimated duration</label><input value="45 minutes"></div>
+      <div style="display:flex; gap:10px;">
+        <div class="btn" style="background:var(--danger); color:#2b0d0f;" onclick="go('admin-branch-services')">Save changes</div>
+        <div class="btn btn-ghost" onclick="go('admin-branch-services')">Cancel</div>
+      </div>
+    </div>
+  `,'magma-autospa.in/admin/branches/services/edit')}
+`);
+
+/* ---- Offers & combos ---- */
+reg('admin-branch-offers','admin','Branch offers & combos', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-offers')}</div>
+    <div class="main-col">
+      <div class="row">${branchTag()}<div class="btn" style="background:var(--danger); color:#2b0d0f; max-width:150px;" onclick="go('admin-branch-offer-form')">+ Add offer</div></div>
+      <h1 class="scr" style="margin-top:10px;">Offers &amp; combos — ${currentBranch}</h1>
+      ${currentBranch==='Kunnamkulam'?`
+        <div class="card" style="margin-top:14px;">
+          <div class="row"><span><b>Wash + Wax Combo</b></span><span class="pill staff">Combo</span></div>
+          <p class="muted" style="margin-top:6px;">Basic Exterior Wash + Polishing &amp; Waxing bundled at ₹1,100 (save ₹200)</p>
+        </div>
+        <div class="card">
+          <div class="row"><span><b>Monsoon Special</b></span><span class="pill" style="background:var(--amber-dim); color:var(--amber);">Time-limited</span></div>
+          <p class="muted" style="margin-top:6px;">20% off Underbody Wash · 1 Jul – 31 Aug 2026</p>
+        </div>
+        <div class="card">
+          <div class="row"><span><b>Weekday Morning Offer</b></span><span class="pill" style="background:var(--amber-dim); color:var(--amber);">Time-limited</span></div>
+          <p class="muted" style="margin-top:6px;">15% off all services · Mon–Fri, 9:00–11:00 AM</p>
+        </div>
+      `: currentBranch==='Thrissur' ? `
+        <div class="card" style="margin-top:14px;">
+          <div class="row"><span><b>New Branch Launch Offer</b></span><span class="pill" style="background:var(--amber-dim); color:var(--amber);">Time-limited</span></div>
+          <p class="muted" style="margin-top:6px;">25% off all services · 1 Jul – 31 Jul 2026</p>
+        </div>
+      `:`<div class="card" style="margin-top:14px;"><p class="muted">No offers running at ${currentBranch} yet.</p></div>`}
+    </div>
+  `,'magma-autospa.in/admin/branches/offers')}
+  <p class="caption">Offers are per-branch — Thrissur's launch promotion won't show up or apply at Kunnamkulam, and vice versa.</p>
+`);
+
+reg('admin-branch-offer-form','admin','Add offer', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminBranchSideNav('admin-branch-offers')}</div>
+    <div class="main-col" style="max-width:480px;">
+      ${backRow()}
+      <h1 class="scr">Add offer — ${currentBranch}</h1>
+      <label class="muted" style="font-size:11.5px; text-transform:uppercase; font-weight:600;">Offer type</label>
+      <div class="role-toggle" style="margin-top:8px; width:fit-content;">
+        <button class="on" style="background:var(--danger); color:#2b0d0f;">Combo</button>
+        <button>Time-limited</button>
+      </div>
+      <div class="field" style="margin-top:18px;"><label>Offer name</label><input placeholder="e.g. Wash + Wax Combo"></div>
+      <label class="muted" style="font-size:11.5px; text-transform:uppercase; font-weight:600;">Services included</label>
+      <div style="margin-top:8px;">
+        <div class="card row" style="cursor:default;"><span><input type="checkbox" checked style="margin-right:10px;">Basic Exterior Wash</span><span class="mono">₹300</span></div>
+        <div class="card row" style="cursor:default;"><span><input type="checkbox" checked style="margin-right:10px;">Polishing &amp; Waxing</span><span class="mono">₹1,000</span></div>
+      </div>
+      <div class="field"><label>Combo price (₹)</label><input value="1100"></div>
+      <div class="field"><label>Valid from → to (leave blank for always-on)</label><input placeholder="DD/MM/YYYY – DD/MM/YYYY, optional time window"></div>
+      <div style="display:flex; gap:10px;">
+        <div class="btn" style="background:var(--danger); color:#2b0d0f;" onclick="go('admin-branch-offers')">Publish offer</div>
+        <div class="btn btn-ghost" onclick="go('admin-branch-offers')">Cancel</div>
+      </div>
+    </div>
+  `,'magma-autospa.in/admin/branches/offers/new')}
+  <p class="caption">Toggling to <b>Time-limited</b> swaps the combo-service picker for a discount % plus a start/end date-and-time window — and this offer only ever applies at ${currentBranch}.</p>
+`);
+
+reg('admin-customers','admin','All customers', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminSideNav('admin-customers')}</div>
+    <div class="main-col">
+      ${backRow()}
+      <h1 class="scr">Customers — all branches</h1>
+      <div class="field" style="margin-top:14px; max-width:360px;"><input placeholder="Search by name or phone…"></div>
+      <table style="margin-top:14px;">
+        <tr><th>Customer</th><th>Branch</th><th>Points balance</th><th>Lifetime spend</th><th></th></tr>
+        <tr><td>Anjali Menon</td><td>Kunnamkulam</td><td class="mono" style="color:var(--teal);">2,140</td><td class="mono">₹18,400</td><td><span class="muted" style="cursor:pointer; color:var(--teal);" onclick="go('admin-whatsapp-preview')">💬 Send update</span></td></tr>
+        <tr><td>Suresh Kumar</td><td>Kunnamkulam</td><td class="mono" style="color:var(--teal);">640</td><td class="mono">₹6,200</td><td><span class="muted" style="cursor:pointer; color:var(--teal);" onclick="go('admin-whatsapp-preview')">💬 Send update</span></td></tr>
+        <tr><td>Fathima Roy</td><td>Thrissur</td><td class="mono" style="color:var(--teal);">3,820</td><td class="mono">₹31,900</td><td><span class="muted" style="cursor:pointer; color:var(--teal);" onclick="go('admin-whatsapp-preview')">💬 Send update</span></td></tr>
+      </table>
+    </div>
+  `,'magma-autospa.in/admin/customers')}
+  <p class="caption">Since there's no customer login, this is the closest thing to a "customer profile" — and it's an internal, admin-only view. Customers themselves only ever see their details via WhatsApp.</p>
+`);
+
+reg('admin-whatsapp-preview','admin','WhatsApp rewards update', ()=>`
+  ${desktopFrame(`
+    <div class="side">${adminSideNav('admin-customers')}</div>
+    <div class="main-col" style="max-width:420px;">
+      ${backRow()}
+      <h1 class="scr">WhatsApp preview</h1>
+      <p class="muted" style="margin:6px 0 16px;">To Anjali Menon · +91 98470 XXXXX</p>
+      <div style="background:#0b141a; border-radius:14px; padding:16px;">
+        <div style="background:#005c4b; color:#e9edef; padding:12px 14px; border-radius:10px 10px 2px 10px; font-size:12.5px; line-height:1.6;">
+          Hi Anjali! 🚗 Thanks for visiting Magma Autospa — Kunnamkulam.<br><br>
+          <b>Bill summary</b><br>
+          Premium Wash + Interior Detail — ₹800<br>
+          Underbody Wash — ₹250<br>
+          <b>Total paid: ₹1,050</b><br><br>
+          <b>Points earned today:</b> +105<br>
+          <b>Your total reward points:</b> 2,140 (≈ ₹1,070)<br><br>
+          Thank you for choosing us! 🙏
+        </div>
+      </div>
+      <div class="btn" style="background:var(--danger); color:#2b0d0f; margin-top:16px;" onclick="go('admin-customers')">Send now</div>
+    </div>
+  `,'magma-autospa.in/admin/customers/whatsapp')}
+  <p class="caption">This is what replaces the old customer rewards screen: a WhatsApp message with the <b>bill breakdown, points earned this visit, and running total</b> — sent automatically after every transaction, and re-sendable by Admin on demand.</p>
+`);
+
+/* boot */
+goHome();
+</script>
+</body>
+</html>
