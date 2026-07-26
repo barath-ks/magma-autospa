@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-space), Arial, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-mono: var(--font-jetbrains), monospace;
+  --font-body: var(--font-inter), sans-serif;
+  
+  --color-bg-base: var(--bg-base);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-panel-elevated: var(--bg-panel-elevated);
+  --color-border-hairline: var(--border-hairline);
+  --color-border-strong: var(--border-hairline-strong);
+  
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  
+  --color-accent-copper: var(--accent-copper);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-oxblood: var(--accent-oxblood);
+  --color-accent-copper-dim: var(--accent-copper-dim);
+}
+
+:root {
+  --bg-base: #0B0C0E;
+  --bg-panel: #1A1C20;
+  --bg-panel-elevated: #212429;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-hairline-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: #EDEDEE;
+  --text-secondary: #8A8D93;
+  --accent-copper: #C9762F;
+  --accent-gold: #E0B94D;
+  --accent-oxblood: #B03A3A;
+  --accent-copper-dim: rgba(201, 118, 47, 0.12);
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  margin: 0;
+  padding: 0;
+}
+
+/* Hairline panel style */
+.panel {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-hairline);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+.panel-flat {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-hairline);
+  border-radius: 12px;
+}
