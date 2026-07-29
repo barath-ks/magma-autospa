@@ -64,9 +64,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Missing id or status" }, { status: 400 });
     }
 
-    // 1. Fetch transaction to verify branch and current assignment
+    // 1. Fetch transaction to verify branch, current assignment, and points data
     const result = await db.execute({
-      sql: `SELECT branch_id, staff_id, status FROM transactions WHERE id = ?`,
+      sql: `SELECT branch_id, staff_id, status, customer_id, points_awarded FROM transactions WHERE id = ?`,
       args: [id],
     });
 
@@ -96,6 +96,8 @@ export async function PATCH(request: Request) {
     const isFinishingNow = status === 'finished' && transaction.status !== 'finished';
 
     // Execute update
+    const batchStatements = [];
+
     let sql = `UPDATE transactions SET status = ?, staff_id = ?`;
     const args: any[] = [status, newStaffId];
 
@@ -108,8 +110,21 @@ export async function PATCH(request: Request) {
 
     sql += ` WHERE id = ?`;
     args.push(id);
+    
+    batchStatements.push({ sql, args });
 
-    await db.execute({ sql, args });
+    if (isFinishingNow && transaction.points_awarded > 0) {
+      batchStatements.push({
+        sql: `UPDATE customers SET points_balance = points_balance + ? WHERE id = ?`,
+        args: [transaction.points_awarded, transaction.customer_id]
+      });
+    }
+
+    if (batchStatements.length > 1) {
+      await db.batch(batchStatements, "write");
+    } else {
+      await db.execute(batchStatements[0]);
+    }
 
     return NextResponse.json({ success: true, staff_id: newStaffId });
   } catch (error) {

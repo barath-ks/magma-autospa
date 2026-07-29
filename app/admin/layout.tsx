@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Users, Building, Tag, Percent, Contact } from "lucide-react";
+import { Users, Building, Tag, Percent, Contact, LineChart } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

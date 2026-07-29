@@ -17,6 +17,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [redeemError, setRedeemError] = useState("");
   const [redeemSuccess, setRedeemSuccess] = useState("");
   
+  const [services, setServices] = useState<any[]>([]);
+  const [showLogVisitModal, setShowLogVisitModal] = useState(false);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [loggingVisit, setLoggingVisit] = useState(false);
+  const [logVisitError, setLogVisitError] = useState("");
+  const [logVisitSuccess, setLogVisitSuccess] = useState("");
+  
   const { id } = use(params);
 
   useEffect(() => {
@@ -46,10 +53,22 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         console.error(e);
       }
     };
+    const fetchServices = async () => {
+      try {
+        const res = await fetch(`/api/staff/services`);
+        if (res.ok) {
+          const data = await res.json();
+          setServices(data.services);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
 
     if (id) {
       fetchCustomer();
       fetchOffers();
+      fetchServices();
     }
   }, [id, router]);
 
@@ -79,6 +98,55 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     setRedeeming(false);
   };
 
+  const handleLogVisit = async () => {
+    if (selectedServiceIds.length === 0) return;
+    setLogVisitError("");
+    setLogVisitSuccess("");
+    setLoggingVisit(true);
+
+    try {
+      const res = await fetch("/api/staff/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: id, service_ids: selectedServiceIds })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setLogVisitSuccess("Visit logged successfully!");
+        // Refresh history
+        const fetchRes = await fetch(`/api/staff/customers/${id}`);
+        if (fetchRes.ok) {
+            const freshData = await fetchRes.json();
+            setHistory(freshData.history);
+        }
+        setTimeout(() => {
+            setShowLogVisitModal(false);
+            setSelectedServiceIds([]);
+            setLogVisitSuccess("");
+        }, 1500);
+      } else {
+        setLogVisitError(data.error || "Failed to log visit.");
+      }
+    } catch (e) {
+      setLogVisitError("System error during request.");
+    }
+    setLoggingVisit(false);
+  };
+
+  const addService = (serviceId: string) => {
+    setSelectedServiceIds([...selectedServiceIds, serviceId]);
+  };
+
+  const removeService = (indexToRemove: number) => {
+    setSelectedServiceIds(selectedServiceIds.filter((_, i) => i !== indexToRemove));
+  };
+
+  const currentTotal = selectedServiceIds.reduce((total, id) => {
+    const s = services.find(srv => srv.id === id);
+    return total + (s ? s.price : 0);
+  }, 0);
+
   if (loading) {
     return <main className="flex-1 p-8 lg:p-12 overflow-auto flex items-center justify-center"><div className="text-text-secondary text-sm font-mono uppercase tracking-widest animate-pulse">Loading Profile...</div></main>;
   }
@@ -94,6 +162,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           <h1 className="text-3xl font-semibold text-text-primary">{customer.name}</h1>
           <p className="text-text-secondary mt-2 text-sm uppercase tracking-wider font-mono">ID: {customer.id.split('-')[0]}</p>
         </div>
+        <button 
+          onClick={() => setShowLogVisitModal(true)}
+          className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-text-primary text-bg-base hover:bg-opacity-90 transition-colors"
+        >
+          Log Visit
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -206,6 +280,93 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogVisitModal && (
+        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="panel border-l-[3px] border-l-accent-copper p-8 w-full max-w-3xl flex gap-8">
+            <div className="flex-1">
+              <h3 className="text-xl font-semibold mb-2 text-text-primary">Log New Visit</h3>
+              <p className="text-xs font-mono text-text-secondary mb-6 uppercase tracking-wider">
+                Select services for <span className="text-text-primary font-bold">{customer.name}</span>
+              </p>
+
+              <div className="space-y-2 mb-6 max-h-96 overflow-y-auto pr-2">
+                {services.length === 0 ? (
+                  <div className="p-4 text-center text-text-secondary text-xs uppercase tracking-widest border border-border-hairline border-dashed">
+                    No services available in catalog.
+                  </div>
+                ) : (
+                  services.map(service => (
+                    <div 
+                      key={service.id} 
+                      className="p-3 border border-border-hairline hover:border-accent-copper bg-bg-panel hover:bg-bg-panel-elevated cursor-pointer flex justify-between items-center transition-colors"
+                      onClick={() => addService(service.id)}
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-text-primary">{service.name}</div>
+                        {service.description && <div className="text-xs text-text-secondary mt-1">{service.description}</div>}
+                      </div>
+                      <div className="font-mono text-sm font-bold text-accent-copper">
+                        {formatCurrency(service.price)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            
+            <div className="w-72 flex flex-col bg-bg-panel-elevated p-6 border border-border-hairline">
+              <h4 className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-4">Cart Summary</h4>
+              
+              <div className="flex-1 overflow-y-auto space-y-3 mb-6">
+                {selectedServiceIds.length === 0 ? (
+                  <div className="text-xs text-text-secondary italic">No services selected</div>
+                ) : (
+                  selectedServiceIds.map((id, index) => {
+                    const s = services.find(srv => srv.id === id);
+                    if (!s) return null;
+                    return (
+                      <div key={index} className="flex justify-between items-start group">
+                        <div className="text-xs text-text-primary pr-2">{s.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-text-secondary">{formatCurrency(s.price)}</span>
+                          <button onClick={() => removeService(index)} className="text-text-secondary hover:text-[#ff6b6b] opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {logVisitError && <div className="text-[#ff6b6b] text-[10px] uppercase tracking-widest font-bold mb-4">{logVisitError}</div>}
+              {logVisitSuccess && <div className="text-[#4ade80] text-[10px] uppercase tracking-widest font-bold mb-4">{logVisitSuccess}</div>}
+
+              <div className="border-t border-border-hairline pt-4 mt-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="text-xs font-bold uppercase tracking-widest text-text-secondary">Total</div>
+                  <div className="font-mono text-xl text-text-primary">{formatCurrency(currentTotal)}</div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button 
+                    onClick={handleLogVisit}
+                    disabled={loggingVisit || selectedServiceIds.length === 0}
+                    className="w-full py-2.5 font-bold text-[10px] uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loggingVisit ? "Saving..." : "Confirm & Log"}
+                  </button>
+                  <button 
+                    onClick={() => setShowLogVisitModal(false)}
+                    disabled={loggingVisit}
+                    className="w-full py-2.5 font-bold text-[10px] uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

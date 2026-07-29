@@ -10,17 +10,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const branchId = (session.user as any).branch_id;
-
   try {
-    const res = await db.execute({
-      sql: `SELECT * FROM offers WHERE branch_id = ? AND is_active = 1 ORDER BY points_required ASC`,
-      args: [branchId],
-    });
-
-    return NextResponse.json({ offers: res.rows });
+    const result = await db.execute("SELECT * FROM services WHERE is_active = 1 ORDER BY name ASC");
+    return NextResponse.json({ services: result.rows });
   } catch (error) {
-    console.error("Error fetching offers:", error);
+    console.error("Error fetching staff services:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

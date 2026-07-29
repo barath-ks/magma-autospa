@@ -36,9 +36,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized: Customer belongs to a different branch" }, { status: 403 });
     }
 
-    // 2. Verify offer belongs to this branch
+    // 2. Verify offer belongs to this branch and is active
     const offerRes = await db.execute({
-      sql: `SELECT points_required, branch_id FROM offers WHERE id = ?`,
+      sql: `SELECT points_required, branch_id, is_active FROM offers WHERE id = ?`,
       args: [offer_id],
     });
 
@@ -49,6 +49,9 @@ export async function POST(request: Request) {
     const offer = offerRes.rows[0];
     if (offer.branch_id !== staffBranchId) {
       return NextResponse.json({ error: "Unauthorized: Offer belongs to a different branch" }, { status: 403 });
+    }
+    if (!offer.is_active) {
+      return NextResponse.json({ error: "Offer is no longer active" }, { status: 400 });
     }
 
     // 3. Check points balance
@@ -63,16 +66,17 @@ export async function POST(request: Request) {
     const redemptionId = uuidv4();
     const newBalance = currentPoints - requiredPoints;
 
-    await db.execute({
-      sql: `UPDATE customers SET points_balance = ? WHERE id = ?`,
-      args: [newBalance, customer_id],
-    });
-
-    await db.execute({
-      sql: `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [redemptionId, customer_id, staffBranchId, staffId, offer_id, requiredPoints],
-    });
+    await db.batch([
+      {
+        sql: `UPDATE customers SET points_balance = ? WHERE id = ?`,
+        args: [newBalance, customer_id],
+      },
+      {
+        sql: `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [redemptionId, customer_id, staffBranchId, staffId, offer_id, requiredPoints],
+      }
+    ], "write");
 
     return NextResponse.json({ 
       success: true, 

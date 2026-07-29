@@ -2,7 +2,7 @@ export const SCHEMA_SQL = `
 -- Branches Table
 CREATE TABLE IF NOT EXISTS branches (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT UNIQUE NOT NULL,
   location TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -39,8 +39,10 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  description TEXT DEFAULT '',
   price REAL NOT NULL,
   points_earned INTEGER NOT NULL,
+  is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -48,8 +50,10 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS offers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  description TEXT DEFAULT '',
   points_required INTEGER NOT NULL,
   branch_id TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
 );
