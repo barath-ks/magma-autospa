@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Check, X, AlertCircle } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
 
 export default function ManagerDashboard() {
   const [profileRequests, setProfileRequests] = useState<any[]>([]);
@@ -80,7 +81,7 @@ export default function ManagerDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
           <div className="panel p-6 border-l-[3px] border-l-accent-gold flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-secondary">Revenue Today</span>
-            <span className="font-mono text-3xl text-text-primary mt-3">$4,250</span>
+            <span className="font-mono text-3xl text-text-primary mt-3">{formatCurrency(4250)}</span>
           </div>
           <div className="panel p-6 border-l-[3px] border-l-accent-gold flex flex-col justify-between">
             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-secondary">Vehicles Processed</span>

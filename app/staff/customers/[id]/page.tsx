@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Car, Phone, Award, Clock } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatCurrency } from "@/lib/format";
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -143,7 +144,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 <td className="p-4 text-text-primary text-sm font-medium">
                   {h.services.map((s:any) => s.name).join(", ")}
                 </td>
-                <td className="p-4 text-text-secondary text-sm font-mono">${h.total_amount.toFixed(2)}</td>
+                <td className="p-4 text-text-secondary text-sm font-mono">{formatCurrency(h.total_amount)}</td>
                 <td className="p-4 text-right">
                   <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-accent-copper flex items-center justify-end gap-1.5">
                     +{h.points_awarded} pts

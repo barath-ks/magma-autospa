@@ -2,11 +2,21 @@
 import { useState, useEffect } from "react";
 import { Activity, DollarSign, ListOrdered, Award, UserPlus } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatCurrency } from "@/lib/format";
 
 export default function AnalyticsPage() {
   const [range, setRange] = useState("month");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Expenses state
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [expensesLoading, setExpensesLoading] = useState(true);
+  
+  const [expenseDesc, setExpenseDesc] = useState("");
+  const [expenseAmt, setExpenseAmt] = useState("");
+  const [submittingExpense, setSubmittingExpense] = useState(false);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -20,8 +30,49 @@ export default function AnalyticsPage() {
       }
       setLoading(false);
     };
+
     fetchAnalytics();
+    fetchExpenses();
   }, [range]);
+
+  const fetchExpenses = async () => {
+    setExpensesLoading(true);
+    try {
+      const res = await fetch(`/api/manager/expenses?range=${range}`);
+      const json = await res.json();
+      if (res.ok) {
+        setExpenses(json.expenses || []);
+        setTotalExpenses(json.totalSum || 0);
+      }
+    } catch (e) {
+      console.error("Failed to load expenses", e);
+    }
+    setExpensesLoading(false);
+  };
+
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expenseDesc || !expenseAmt) return;
+    setSubmittingExpense(true);
+    try {
+      const res = await fetch("/api/manager/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: expenseDesc, amount: expenseAmt })
+      });
+      if (res.ok) {
+        setExpenseDesc("");
+        setExpenseAmt("");
+        fetchExpenses();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to add expense");
+      }
+    } catch (e) {
+      console.error("Failed to add expense", e);
+    }
+    setSubmittingExpense(false);
+  };
 
   const hasData = data && data.txCount > 0;
 
@@ -81,7 +132,7 @@ export default function AnalyticsPage() {
                   <DollarSign size={16} className="text-accent-gold" />
                 </div>
                 <div className="text-3xl font-mono font-bold text-text-primary">
-                  ${data.revenue.toFixed(2)}
+                  {formatCurrency(data.revenue)}
                 </div>
               </div>
               
@@ -148,12 +199,99 @@ export default function AnalyticsPage() {
                       <tr key={idx} className="hover:bg-bg-panel-elevated transition-colors">
                         <td className="p-4 pl-6 text-text-primary text-sm font-medium">{service.name}</td>
                         <td className="p-4 text-right font-mono text-text-secondary text-sm">{service.count}</td>
-                        <td className="p-4 pr-6 text-right font-mono text-accent-gold font-bold text-sm">${service.revenue.toFixed(2)}</td>
+                        <td className="p-4 pr-6 text-right font-mono text-accent-gold font-bold text-sm">{formatCurrency(service.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
+            </div>
+
+            {/* Expenses Tracking */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Add Expense Form */}
+              <div className="panel p-6 border-l-[3px] border-l-accent-oxblood flex flex-col">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-text-primary mb-6">Log Expense</h2>
+                <form onSubmit={handleAddExpense} className="flex-1 flex flex-col">
+                  <div className="mb-4">
+                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Description</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={expenseDesc} 
+                      onChange={e => setExpenseDesc(e.target.value)} 
+                      placeholder="e.g. Cleaning Supplies"
+                      className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Amount (₹)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0.01"
+                      required 
+                      value={expenseAmt} 
+                      onChange={e => setExpenseAmt(e.target.value)} 
+                      placeholder="0.00"
+                      className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={submittingExpense || !expenseDesc || !expenseAmt}
+                    className="mt-auto w-full py-3 bg-accent-oxblood text-white text-xs font-bold uppercase tracking-widest hover:bg-opacity-90 disabled:opacity-50 transition-colors"
+                  >
+                    {submittingExpense ? "Logging..." : "Log Expense"}
+                  </button>
+                </form>
+              </div>
+
+              {/* Expense List */}
+              <div className="panel overflow-hidden border-t-[3px] border-t-accent-oxblood lg:col-span-2 flex flex-col">
+                <div className="p-6 border-b border-border-hairline bg-bg-base flex justify-between items-center">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-text-primary">Logged Expenses</h2>
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Total (Selected Range)</div>
+                    <div className="text-lg font-mono font-bold text-accent-oxblood">{formatCurrency(totalExpenses)}</div>
+                  </div>
+                </div>
+                
+                {expensesLoading ? (
+                  <div className="p-8 text-center text-text-secondary text-sm uppercase tracking-widest font-mono animate-pulse">Loading expenses...</div>
+                ) : expenses.length === 0 ? (
+                  <div className="p-8 text-center text-text-secondary text-sm uppercase tracking-widest flex-1 flex flex-col items-center justify-center">
+                    No expenses logged in this period.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto flex-1 max-h-[300px] overflow-y-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-bg-panel-elevated border-b border-border-hairline text-text-secondary uppercase text-[10px] tracking-[0.2em] font-medium sticky top-0">
+                        <tr>
+                          <th className="p-4 pl-6">Date</th>
+                          <th className="p-4">Description</th>
+                          <th className="p-4">Entered By</th>
+                          <th className="p-4 pr-6 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-hairline bg-bg-panel">
+                        {expenses.map((exp: any) => (
+                          <tr key={exp.id} className="hover:bg-bg-panel-elevated transition-colors">
+                            <td className="p-4 pl-6 text-text-secondary text-sm font-mono">
+                              {new Date(exp.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-4 text-text-primary text-sm font-medium">{exp.description}</td>
+                            <td className="p-4 text-text-secondary text-xs">{exp.entered_by_name}</td>
+                            <td className="p-4 pr-6 text-right font-mono text-accent-oxblood font-bold text-sm">
+                              {formatCurrency(exp.amount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

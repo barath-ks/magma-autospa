@@ -152,4 +152,16 @@ CREATE TABLE IF NOT EXISTS redemptions (
   FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE RESTRICT,
   FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE RESTRICT
 );
+
+-- Branch Expenses Table
+CREATE TABLE IF NOT EXISTS branch_expenses (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  description TEXT NOT NULL,
+  amount REAL NOT NULL CHECK(amount > 0),
+  entered_by TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+  FOREIGN KEY (entered_by) REFERENCES users(id) ON DELETE SET NULL
+);
 `;
