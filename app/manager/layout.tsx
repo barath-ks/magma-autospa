@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Users, LayoutDashboard, Activity, Calendar } from "lucide-react";
+import { Users, LayoutDashboard, Activity, Calendar, ListOrdered } from "lucide-react";
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -38,6 +38,9 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
           </Link>
           <Link href="/manager/analytics" className={linkClass("/manager/analytics")}>
             <Activity size={16} /> Branch Analytics
+          </Link>
+          <Link href="/manager/jobs" className={linkClass("/manager/jobs")}>
+            <ListOrdered size={16} /> All Jobs
           </Link>
           <Link href="/manager/staff" className={linkClass("/manager/staff")}>
             <Users size={16} /> Manage Staff
