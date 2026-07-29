@@ -59,11 +59,16 @@ CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   customer_id TEXT NOT NULL,
   branch_id TEXT NOT NULL,
+  staff_id TEXT,
   total_amount REAL NOT NULL,
   points_awarded INTEGER NOT NULL,
+  status TEXT CHECK(status IN ('pending', 'in_progress', 'finished')) DEFAULT 'pending',
+  claimed_at DATETIME,
+  finished_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
-  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT,
+  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Transaction Items (Services) Table
@@ -104,12 +109,13 @@ CREATE TABLE IF NOT EXISTS shift_requests (
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
 );
 
--- Username Change Requests Table
-CREATE TABLE IF NOT EXISTS username_change_requests (
+-- Profile Change Requests Table
+CREATE TABLE IF NOT EXISTS profile_change_requests (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
-  current_login_id TEXT NOT NULL,
-  requested_login_id TEXT NOT NULL,
+  field_type TEXT CHECK(field_type IN ('login_id', 'name')) NOT NULL,
+  current_value TEXT NOT NULL,
+  requested_value TEXT NOT NULL,
   status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
   requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   reviewed_by TEXT,
@@ -130,5 +136,20 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   used BOOLEAN DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Redemptions Table
+CREATE TABLE IF NOT EXISTS redemptions (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  staff_id TEXT NOT NULL,
+  offer_id TEXT NOT NULL,
+  points_redeemed INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT,
+  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE RESTRICT,
+  FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE RESTRICT
 );
 `;

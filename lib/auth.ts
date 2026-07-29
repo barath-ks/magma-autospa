@@ -51,6 +51,8 @@ export const authOptions: NextAuthOptions = {
             branch_id: user.branch_id as string | null,
             must_change_password: Boolean(user.must_change_password),
             remember: credentials.remember === "true",
+            name: user.name as string,
+            login_id: user.login_id as string,
           };
         } catch (error) {
           console.error("Authorize error:", error);
@@ -71,6 +73,8 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role;
         token.branch_id = (user as any).branch_id;
         token.must_change_password = (user as any).must_change_password;
+        token.name = user.name;
+        token.login_id = (user as any).login_id;
         
         // Custom expiry logic for remember me
         const remember = (user as any).remember;
@@ -98,6 +102,8 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role as string;
         (session.user as any).branch_id = token.branch_id as string | null;
         (session.user as any).must_change_password = token.must_change_password;
+        session.user.name = token.name as string;
+        (session.user as any).login_id = token.login_id as string;
       }
       return session;
     },

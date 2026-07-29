@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { Plus, Calendar, Clock, AlertCircle, XCircle } from "lucide-react";
 
 export default function StaffSchedulePage() {
   const [upcoming, setUpcoming] = useState<any[]>([]);

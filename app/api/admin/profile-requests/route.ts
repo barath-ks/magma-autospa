@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   try {
     const result = await db.execute({
       sql: `SELECT req.*, u.role 
-            FROM username_change_requests req
+            FROM profile_change_requests req
             JOIN users u ON req.user_id = u.id
             WHERE u.role = 'manager' AND req.status = 'pending'
             ORDER BY req.requested_at ASC`,
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ requests: result.rows });
   } catch (error) {
-    console.error("Error fetching manager username requests:", error);
+    console.error("Error fetching manager profile requests:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }
@@ -49,8 +49,8 @@ export async function PATCH(request: Request) {
     }
 
     const checkResult = await db.execute({
-      sql: `SELECT req.requested_login_id, req.user_id, u.role
-            FROM username_change_requests req
+      sql: `SELECT req.requested_value, req.field_type, req.user_id, u.role
+            FROM profile_change_requests req
             JOIN users u ON req.user_id = u.id
             WHERE req.id = ?`,
       args: [id]
@@ -68,30 +68,32 @@ export async function PATCH(request: Request) {
     }
 
     if (status === 'approved') {
-      // Uniqueness check
-      const uniqueCheck = await db.execute({
-        sql: "SELECT id FROM users WHERE login_id = ?",
-        args: [targetUser.requested_login_id]
-      });
-
-      if (uniqueCheck.rows.length > 0) {
-        // Auto-reject
-        await db.execute({
-          sql: `UPDATE username_change_requests 
-                SET status = 'rejected', reviewer_note = 'ID no longer available', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
-                WHERE id = ?`,
-          args: [adminId, id],
+      // Uniqueness check for login_id
+      if (targetUser.field_type === 'login_id') {
+        const uniqueCheck = await db.execute({
+          sql: "SELECT id FROM users WHERE login_id = ?",
+          args: [targetUser.requested_value]
         });
-        return NextResponse.json({ success: true, auto_rejected: true, message: "ID was taken; request auto-rejected." });
+
+        if (uniqueCheck.rows.length > 0) {
+          // Auto-reject
+          await db.execute({
+            sql: `UPDATE profile_change_requests 
+                  SET status = 'rejected', reviewer_note = 'ID no longer available', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+                  WHERE id = ?`,
+            args: [adminId, id],
+          });
+          return NextResponse.json({ success: true, auto_rejected: true, message: "ID was taken; request auto-rejected." });
+        }
       }
 
       await db.execute({
-        sql: `UPDATE users SET login_id = ? WHERE id = ?`,
-        args: [targetUser.requested_login_id, targetUser.user_id],
+        sql: `UPDATE users SET ${targetUser.field_type} = ? WHERE id = ?`,
+        args: [targetUser.requested_value, targetUser.user_id],
       });
       
       await db.execute({
-        sql: `UPDATE username_change_requests 
+        sql: `UPDATE profile_change_requests 
               SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
               WHERE id = ?`,
         args: [adminId, id],
@@ -100,7 +102,7 @@ export async function PATCH(request: Request) {
     } else {
       // Rejection
       await db.execute({
-        sql: `UPDATE username_change_requests 
+        sql: `UPDATE profile_change_requests 
               SET status = 'rejected', reviewer_note = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
               WHERE id = ?`,
         args: [reviewer_note, adminId, id],
@@ -109,7 +111,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("Error updating username request:", error);
+    console.error("Error updating profile request:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

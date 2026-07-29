@@ -1,6 +1,6 @@
 "use client";
 
-import { signIn, useSession } from "next-auth/react";
+import { signIn, useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
@@ -21,11 +21,17 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (status === "authenticated" && (session?.user as any)?.role) {
-      const userRole = (session.user as any).role;
-      if (userRole === "admin") router.push("/admin");
-      else if (userRole === "manager") router.push("/manager");
-      else if (userRole === "staff") router.push("/staff");
+    if (status === "authenticated") {
+      if ((session?.user as any)?.role) {
+        const userRole = (session.user as any).role;
+        if (userRole === "admin") router.push("/admin");
+        else if (userRole === "manager") router.push("/manager");
+        else if (userRole === "staff") router.push("/staff");
+      } else {
+        // If they are "authenticated" but missing a role, their token is broken/expired.
+        // Force a sign out to destroy the corrupted cookie so they can log in again.
+        signOut({ redirect: false });
+      }
     }
   }, [status, session, router]);
 
@@ -47,7 +53,8 @@ function LoginForm() {
     }
   };
 
-  if (status === "loading" || status === "authenticated") {
+  // Only block the screen if they are actually loading, OR if they have a fully valid authenticated session with a role.
+  if (status === "loading" || (status === "authenticated" && (session?.user as any)?.role)) {
     return <div className="text-text-primary z-20 relative font-bold">Authenticating...</div>;
   }
 

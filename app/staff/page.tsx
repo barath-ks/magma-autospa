@@ -1,6 +1,49 @@
 "use client";
+import { useState, useEffect } from "react";
 
 export default function StaffDashboard() {
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  const fetchJobs = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/staff/jobs");
+      if (res.ok) {
+        const data = await res.json();
+        setJobs(data.jobs);
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch("/api/staff/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: newStatus }),
+      });
+      if (res.ok) {
+        fetchJobs();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update status");
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    setActionLoadingId(null);
+  };
+
   return (
       <main className="flex-1 p-8 lg:p-12 overflow-auto">
         <div className="flex justify-between items-end mb-10">
@@ -37,30 +80,62 @@ export default function StaffDashboard() {
                 <th className="p-4">Ticket ID</th>
                 <th className="p-4">Vehicle</th>
                 <th className="p-4">Service Level</th>
+                <th className="p-4">Timings</th>
                 <th className="p-4">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-hairline bg-bg-panel">
-              <tr className="hover:bg-bg-panel-elevated transition-colors">
-                <td className="p-4 font-mono text-text-primary text-sm">#TK-4092</td>
-                <td className="p-4 text-text-primary text-sm font-medium">Porsche 911 GT3</td>
-                <td className="p-4 text-text-secondary text-sm">Ceramic Coating</td>
-                <td className="p-4">
-                  <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-accent-copper flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-accent-copper animate-pulse"></span> In Progress
-                  </span>
-                </td>
-              </tr>
-              <tr className="hover:bg-bg-panel-elevated transition-colors">
-                <td className="p-4 font-mono text-text-primary text-sm">#TK-4093</td>
-                <td className="p-4 text-text-primary text-sm font-medium">BMW M4 Comp</td>
-                <td className="p-4 text-text-secondary text-sm">Full Detail</td>
-                <td className="p-4">
-                  <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-text-secondary flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-text-secondary border border-text-secondary/50"></span> Waiting
-                  </span>
-                </td>
-              </tr>
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="p-4 text-text-secondary text-xs font-mono uppercase animate-pulse">Loading jobs...</td>
+                </tr>
+              ) : jobs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-text-secondary text-sm font-mono uppercase tracking-widest">No active jobs in queue.</td>
+                </tr>
+              ) : jobs.map(job => (
+                <tr key={job.id} className="hover:bg-bg-panel-elevated transition-colors">
+                  <td className="p-4">
+                    <div className="font-mono text-text-primary text-sm">#{job.id.slice(0,8).toUpperCase()}</div>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${job.assigned_staff_name ? 'text-text-primary' : 'text-text-secondary/60'}`}>
+                      {job.assigned_staff_name ? `ASSIGNED TO: ${job.assigned_staff_name}` : 'UNASSIGNED'}
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="text-text-primary text-sm font-medium">{job.vehicle_model || 'Unknown Vehicle'}</div>
+                    <div className="text-[10px] font-mono text-text-secondary">{job.vehicle_number || ''}</div>
+                  </td>
+                  <td className="p-4 text-text-secondary text-sm">{job.service_name || 'No Service Logged'}</td>
+                  <td className="p-4">
+                    <div className="text-[10px] font-mono text-text-secondary uppercase">
+                      <div className="flex gap-2">
+                        <span className="w-14">ARRIVED:</span>
+                        <span className="text-text-primary">{job.created_at ? new Date(job.created_at + 'Z').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span>
+                      </div>
+                      <div className="flex gap-2 mt-1">
+                        <span className="w-14">CLAIMED:</span>
+                        <span className="text-text-primary">{job.claimed_at ? new Date(job.claimed_at + 'Z').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span>
+                      </div>
+                      <div className="flex gap-2 mt-1">
+                        <span className="w-14">FINISHED:</span>
+                        <span className="text-text-primary">{job.finished_at ? new Date(job.finished_at + 'Z').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <select 
+                      value={job.status} 
+                      onChange={(e) => handleStatusChange(job.id, e.target.value)}
+                      disabled={actionLoadingId === job.id}
+                      className={`appearance-none bg-bg-base border border-border-hairline px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest cursor-pointer focus:outline-none focus:border-accent-copper transition-colors ${actionLoadingId === job.id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-panel-elevated'} ${job.status === 'in_progress' ? 'text-accent-copper border-accent-copper/30' : 'text-text-secondary'}`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="finished">Finished</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

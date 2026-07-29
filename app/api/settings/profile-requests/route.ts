@@ -12,13 +12,13 @@ export async function GET(request: Request) {
 
   try {
     const result = await db.execute({
-      sql: `SELECT * FROM username_change_requests WHERE user_id = ? ORDER BY requested_at DESC`,
+      sql: `SELECT * FROM profile_change_requests WHERE user_id = ? ORDER BY requested_at DESC`,
       args: [session.user.id],
     });
 
     return NextResponse.json({ requests: result.rows });
   } catch (error) {
-    console.error("Error fetching username requests:", error);
+    console.error("Error fetching profile requests:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }
@@ -31,34 +31,41 @@ export async function POST(request: Request) {
 
   const userId = session.user.id;
   const role = (session.user as any).role;
-  const currentLoginId = (session.user as any).login_id;
   
   try {
     const body = await request.json();
-    const { requested_login_id } = body;
+    const { field_type, requested_value } = body;
 
-    if (!requested_login_id || requested_login_id.length < 3) {
-      return NextResponse.json({ error: "Valid requested login ID is required" }, { status: 400 });
+    if (!['login_id', 'name'].includes(field_type)) {
+      return NextResponse.json({ error: "Invalid field type" }, { status: 400 });
     }
 
-    if (requested_login_id === currentLoginId) {
-      return NextResponse.json({ error: "Requested ID is the same as current ID" }, { status: 400 });
+    if (!requested_value || requested_value.trim().length < 3) {
+      return NextResponse.json({ error: "Valid requested value is required" }, { status: 400 });
+    }
+
+    const currentValue = field_type === 'login_id' ? (session.user as any).login_id : session.user.name;
+
+    if (requested_value === currentValue) {
+      return NextResponse.json({ error: "Requested value is the same as current value" }, { status: 400 });
     }
 
     // If Admin, bypass request queue, verify uniqueness and apply directly
     if (role === 'admin') {
-      const checkUnique = await db.execute({
-        sql: "SELECT id FROM users WHERE login_id = ?",
-        args: [requested_login_id]
-      });
+      if (field_type === 'login_id') {
+        const checkUnique = await db.execute({
+          sql: "SELECT id FROM users WHERE login_id = ?",
+          args: [requested_value]
+        });
 
-      if (checkUnique.rows.length > 0) {
-        return NextResponse.json({ error: "ID no longer available" }, { status: 400 });
+        if (checkUnique.rows.length > 0) {
+          return NextResponse.json({ error: "ID no longer available" }, { status: 400 });
+        }
       }
 
       await db.execute({
-        sql: "UPDATE users SET login_id = ? WHERE id = ?",
-        args: [requested_login_id, userId]
+        sql: `UPDATE users SET ${field_type} = ? WHERE id = ?`,
+        args: [requested_value, userId]
       });
 
       return NextResponse.json({ success: true, directUpdate: true });
@@ -68,9 +75,9 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     
     await db.execute({
-      sql: `INSERT INTO username_change_requests (id, user_id, current_login_id, requested_login_id)
-            VALUES (?, ?, ?, ?)`,
-      args: [id, userId, currentLoginId, requested_login_id],
+      sql: `INSERT INTO profile_change_requests (id, user_id, field_type, current_value, requested_value)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [id, userId, field_type, currentValue, requested_value],
     });
 
     return NextResponse.json({ success: true, id });
@@ -78,7 +85,7 @@ export async function POST(request: Request) {
     if (error.message?.includes("UNIQUE constraint failed")) {
       return NextResponse.json({ error: "ID no longer available" }, { status: 400 });
     }
-    console.error("Error creating username request:", error);
+    console.error("Error creating profile request:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

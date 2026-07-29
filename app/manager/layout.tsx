@@ -44,7 +44,10 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
           </Link>
         </nav>
         
-        <div className="p-4 border-t border-border-hairline">
+        <div className="p-4 border-t border-border-hairline space-y-2">
+          <Link href="/profile" className="flex items-center justify-center gap-2 w-full text-xs font-bold text-text-primary hover:bg-bg-panel-elevated px-4 py-2.5 uppercase tracking-widest transition-colors border border-border-hairline">
+            My Profile
+          </Link>
           <button 
             onClick={() => signOut({ callbackUrl: "/" })} 
             className="w-full text-xs font-bold text-white bg-accent-gold hover:bg-opacity-90 px-4 py-2.5 uppercase tracking-widest transition-colors flex justify-center items-center gap-2"

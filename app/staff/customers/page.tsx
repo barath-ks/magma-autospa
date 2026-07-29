@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { Plus, Search, User, Phone, Car } from "lucide-react";
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");

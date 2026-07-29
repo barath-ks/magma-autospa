@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { AlertCircle, X, Check, Calendar } from "lucide-react";
 
 export default function ManagerSchedulePage() {
   const [pending, setPending] = useState<any[]>([]);

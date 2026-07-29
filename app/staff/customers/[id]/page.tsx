@@ -10,6 +10,11 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [customer, setCustomer] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offers, setOffers] = useState<any[]>([]);
+  const [showRedeemModal, setShowRedeemModal] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState("");
+  const [redeemSuccess, setRedeemSuccess] = useState("");
   
   const { id } = use(params);
 
@@ -29,8 +34,49 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       }
       setLoading(false);
     };
-    if (id) fetchCustomer();
+    const fetchOffers = async () => {
+      try {
+        const res = await fetch(`/api/staff/offers`);
+        if (res.ok) {
+          const data = await res.json();
+          setOffers(data.offers);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    if (id) {
+      fetchCustomer();
+      fetchOffers();
+    }
   }, [id, router]);
+
+  const handleRedeem = async (offerId: string) => {
+    setRedeemError("");
+    setRedeemSuccess("");
+    setRedeeming(true);
+
+    try {
+      const res = await fetch("/api/staff/redemptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: id, offer_id: offerId })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setRedeemSuccess("Reward redeemed successfully!");
+        setCustomer({ ...customer, points_balance: data.new_balance });
+        setTimeout(() => setShowRedeemModal(false), 1500);
+      } else {
+        setRedeemError(data.error || "Failed to redeem reward.");
+      }
+    } catch (e) {
+      setRedeemError("System error during redemption.");
+    }
+    setRedeeming(false);
+  };
 
   if (loading) {
     return <main className="flex-1 p-8 lg:p-12 overflow-auto flex items-center justify-center"><div className="text-text-secondary text-sm font-mono uppercase tracking-widest animate-pulse">Loading Profile...</div></main>;
@@ -63,9 +109,17 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
         </div>
-        <div className="panel p-6 border-l-[3px] border-l-accent-copper flex flex-col justify-between bg-accent-copper/5 border border-accent-copper/20">
-          <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-accent-copper flex items-center gap-1.5"><Award size={12}/> Loyalty Balance</div>
-          <div className="font-mono text-5xl text-text-primary mt-3 text-right">{customer.points_balance}</div>
+        <div className="panel p-6 border-l-[3px] border-l-accent-copper flex flex-col justify-between bg-accent-copper/5 border border-accent-copper/20 relative">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-accent-copper flex items-center justify-end gap-1.5"><Award size={12}/> Loyalty Balance</div>
+            <div className="font-mono text-5xl text-text-primary mt-3 text-right">{customer.points_balance}</div>
+          </div>
+          <button 
+            onClick={() => setShowRedeemModal(true)}
+            className="mt-6 w-full py-2.5 font-bold text-[10px] uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 transition-colors"
+          >
+            Redeem Reward
+          </button>
         </div>
       </div>
 
@@ -103,6 +157,58 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </tbody>
         </table>
       </div>
+
+      {showRedeemModal && (
+        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="panel border-l-[3px] border-l-accent-copper p-8 w-full max-w-lg">
+            <h3 className="text-xl font-semibold mb-2 text-text-primary">Redeem Reward</h3>
+            <p className="text-xs font-mono text-text-secondary mb-6 uppercase tracking-wider">
+              {customer.name} — Balance: <span className="text-accent-copper font-bold">{customer.points_balance} pts</span>
+            </p>
+
+            {redeemError && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-4 p-3">{redeemError}</div>}
+            {redeemSuccess && <div className="text-[#4ade80] bg-[#163a24] border border-[#1d5230] text-xs uppercase tracking-widest font-bold mb-4 p-3">{redeemSuccess}</div>}
+
+            <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-2">
+              {offers.length === 0 ? (
+                <div className="p-4 text-center text-text-secondary text-xs uppercase tracking-widest border border-border-hairline border-dashed">
+                  No offers configured for this branch.
+                </div>
+              ) : (
+                offers.map(offer => {
+                  const canAfford = customer.points_balance >= offer.points_required;
+                  return (
+                    <div 
+                      key={offer.id} 
+                      className={`p-4 border flex justify-between items-center transition-colors ${
+                        canAfford 
+                          ? "border-border-hairline hover:border-accent-copper bg-bg-panel hover:bg-bg-panel-elevated cursor-pointer" 
+                          : "border-border-hairline/30 bg-bg-base opacity-50 cursor-not-allowed"
+                      }`}
+                      onClick={() => { if (canAfford && !redeeming) handleRedeem(offer.id); }}
+                    >
+                      <div className="text-sm font-medium text-text-primary">{offer.name}</div>
+                      <div className={`font-mono text-xs font-bold ${canAfford ? 'text-accent-copper' : 'text-text-secondary'}`}>
+                        {offer.points_required} pts
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-border-hairline">
+              <button 
+                onClick={() => setShowRedeemModal(false)}
+                disabled={redeeming}
+                className="px-6 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

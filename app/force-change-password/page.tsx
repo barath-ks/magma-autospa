@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
-import { GlassDroplets } from "../../components/GlassDroplets";
+import { ShieldAlert } from "lucide-react";
 
 export default function ForceChangePassword() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -35,29 +35,74 @@ export default function ForceChangePassword() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-[#cbd5e1] via-[#e2e8f0] to-[#94a3b8] overflow-hidden">
-      <div className="glass-card z-20 w-full max-w-md p-8 mx-4 relative border-red-400">
-        <GlassDroplets count={25} />
-        <h1 className="relative z-10 mb-2 text-center text-2xl font-extrabold text-slate-900">Action Required</h1>
-        <p className="relative z-10 mb-6 text-center text-sm font-bold text-red-600">Your administrator requires you to set a new password before continuing.</p>
+    <div className="flex min-h-screen w-full bg-bg-base items-center justify-center p-6">
+      <div className="w-full max-w-md bg-bg-panel p-8 lg:p-10 border-l-[3px] border-l-accent-copper border-y border-r border-border-hairline shadow-2xl">
         
-        {error && <div className="relative z-10 mb-4 text-red-500 text-center text-sm font-bold bg-red-100/50 p-2 rounded">{error}</div>}
+        <div className="mb-8 border-b border-border-hairline pb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldAlert size={20} className="text-accent-copper" />
+            <span className="text-accent-copper font-mono text-[11px] uppercase tracking-[0.15em] font-bold">
+              Action Required
+            </span>
+          </div>
+          <h2 className="text-2xl font-serif text-text-primary mb-2">Update Password</h2>
+          <p className="text-text-secondary text-sm font-medium">
+            Your administrator requires you to set a new password before continuing.
+          </p>
+        </div>
         
-        <form onSubmit={handleSubmit} className="relative z-10 space-y-4">
-          <div>
-            <label className="block text-sm font-bold text-slate-700">Current (Temporary) Password</label>
-            <input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white/60 p-2 shadow-inner font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-400" required />
+        {error && (
+          <div className="mb-6 text-[#ff6b6b] bg-[#3a1616] p-4 text-xs uppercase tracking-widest font-bold border border-[#521d1d]">
+            {error}
           </div>
+        )}
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-bold text-slate-700">New Password</label>
-            <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white/60 p-2 shadow-inner font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-400" required />
+            <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
+              Current (Temporary) Password
+            </label>
+            <input 
+              type="password" 
+              value={currentPassword} 
+              onChange={e => setCurrentPassword(e.target.value)} 
+              className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
+              required 
+            />
           </div>
+          
           <div>
-            <label className="block text-sm font-bold text-slate-700">Confirm New Password</label>
-            <input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white/60 p-2 shadow-inner font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-400" required />
+            <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
+              New Password
+            </label>
+            <input 
+              type="password" 
+              value={newPassword} 
+              onChange={e => setNewPassword(e.target.value)} 
+              className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
+              required 
+            />
           </div>
-          <button type="submit" disabled={loading} className="w-full rounded-md bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 p-3 text-white font-extrabold mt-6 shadow-md transition-all">
-            {loading ? "Updating..." : "Update Password & Log In"}
+          
+          <div>
+            <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
+              Confirm New Password
+            </label>
+            <input 
+              type="password" 
+              value={confirmPassword} 
+              onChange={e => setConfirmPassword(e.target.value)} 
+              className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
+              required 
+            />
+          </div>
+          
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className="w-full bg-accent-copper p-3.5 text-white font-bold text-xs uppercase tracking-widest transition-all duration-200 mt-8 disabled:opacity-50 hover:brightness-110 active:brightness-95"
+          >
+            {loading ? "UPDATING..." : "UPDATE PASSWORD & LOG IN"}
           </button>
         </form>
       </div>
