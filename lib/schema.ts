@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   total_amount REAL NOT NULL,
   points_awarded INTEGER NOT NULL,
   status TEXT CHECK(status IN ('pending', 'in_progress', 'finished')) DEFAULT 'pending',
+  vehicle_number TEXT,
+  vehicle_model TEXT,
   claimed_at DATETIME,
   finished_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -179,5 +181,17 @@ CREATE TABLE IF NOT EXISTS branch_expenses (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
   FOREIGN KEY (entered_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- Loyalty Points Ledger Table
+CREATE TABLE IF NOT EXISTS loyalty_points_ledger (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  type TEXT CHECK(type IN ('earned', 'redeemed')) NOT NULL,
+  points INTEGER NOT NULL,
+  related_transaction_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (related_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
 );
 `;

@@ -6,7 +6,8 @@ import crypto from "crypto";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user || (session.user as any).role !== "staff") {
+  const role = (session.user as any).role;
+  if (!session || !session.user || (role !== "staff" && role !== "manager")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

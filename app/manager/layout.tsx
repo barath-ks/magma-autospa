@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Users, LayoutDashboard, Activity, Calendar, ListOrdered } from "lucide-react";
+import { Users, LayoutDashboard, Activity, Calendar, ListOrdered, User } from "lucide-react";
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -59,6 +59,9 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
           </Link>
           <Link href="/manager/staff" className={linkClass("/manager/staff")}>
             <Users size={16} /> Manage Staff
+          </Link>
+          <Link href="/manager/customers" className={linkClass("/manager/customers")}>
+            <User size={16} /> Customers
           </Link>
         </nav>
         

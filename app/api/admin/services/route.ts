@@ -39,6 +39,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Price must be greater than 0" }, { status: 400 });
     }
 
+    // Check for duplicate name
+    const existing = await db.execute({
+      sql: `SELECT id FROM services WHERE LOWER(name) = LOWER(?)`,
+      args: [name.trim()]
+    });
+
+    if (existing.rows.length > 0) {
+      return NextResponse.json({ error: "A service with this name already exists" }, { status: 400 });
+    }
+
     const id = uuidv4();
     await db.execute({
       sql: `INSERT INTO services (id, name, description, price, points_earned, is_active)

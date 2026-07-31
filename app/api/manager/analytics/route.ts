@@ -16,8 +16,15 @@ export async function GET(request: Request) {
   const range = searchParams.get("range") || "month";
 
   let dateModifier = "'-1 month'";
-  if (range === "week") dateModifier = "'-7 days'";
-  if (range === "year") dateModifier = "'-1 year'";
+  let prevPeriodStart = "'-2 months'";
+  if (range === "week") {
+    dateModifier = "'-7 days'";
+    prevPeriodStart = "'-14 days'";
+  }
+  if (range === "year") {
+    dateModifier = "'-1 year'";
+    prevPeriodStart = "'-2 years'";
+  }
 
   try {
     // 1. Transaction Stats (Revenue, Count, Points Awarded)
@@ -69,13 +76,54 @@ export async function GET(request: Request) {
       args: [branchId],
     });
 
+    // 4. Previous Period Revenue
+    const prevTxStatsRes = await db.execute({
+      sql: `SELECT COALESCE(SUM(total_amount), 0) as prev_revenue
+            FROM transactions 
+            WHERE branch_id = ? 
+              AND created_at >= datetime('now', ${prevPeriodStart})
+              AND created_at < datetime('now', ${dateModifier})`,
+      args: [branchId],
+    });
+    const prevRevenue = prevTxStatsRes.rows[0].prev_revenue;
+    let revenueGrowth = null; // null indicates no previous data to compare against
+    if (prevRevenue > 0) {
+      revenueGrowth = ((Number(stats.revenue) - Number(prevRevenue)) / Number(prevRevenue)) * 100;
+    }
+
+    // 5. Repeat Visit Rate (Using finished transactions only)
+    const repeatRes = await db.execute({
+      sql: `
+        SELECT 
+          COUNT(customer_id) as total_unique,
+          SUM(CASE WHEN visit_count > 1 THEN 1 ELSE 0 END) as repeat_customers
+        FROM (
+          SELECT customer_id, COUNT(*) as visit_count
+          FROM transactions
+          WHERE branch_id = ? AND created_at >= datetime('now', ${dateModifier}) AND status = 'finished'
+          GROUP BY customer_id
+        )
+      `,
+      args: [branchId],
+    });
+    
+    const totalUnique = Number(repeatRes.rows[0].total_unique || 0);
+    const repeatCustomers = Number(repeatRes.rows[0].repeat_customers || 0);
+    const repeatVisitRate = totalUnique > 0 ? (repeatCustomers / totalUnique) * 100 : 0;
+
+    // 6. Average Ticket Size (Aligning exactly with total Revenue / total Transactions shown)
+    const avgTicketSize = Number(stats.tx_count) > 0 ? Number(stats.revenue) / Number(stats.tx_count) : 0;
+
     return NextResponse.json({
       revenue: stats.revenue,
       txCount: stats.tx_count,
       pointsAwarded: stats.points_awarded,
       pointsRedeemed: pointsRedeemed,
       newCustomers,
-      topServices: topServicesRes.rows
+      topServices: topServicesRes.rows,
+      revenueGrowth,
+      avgTicketSize,
+      repeatVisitRate
     });
 
   } catch (error) {

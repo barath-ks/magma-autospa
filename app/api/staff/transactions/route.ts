@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
     // 2. Validate customer branch
     const customerRes = await db.execute({
-      sql: `SELECT branch_id FROM customers WHERE id = ?`,
+      sql: `SELECT branch_id, vehicle_model, vehicle_number FROM customers WHERE id = ?`,
       args: [customer_id],
     });
 
@@ -81,9 +81,9 @@ export async function POST(request: Request) {
 
     // Insert Transaction
     batchStatements.push({
-      sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, created_at)
-            VALUES (?, ?, ?, NULL, ?, ?, 'pending', CURRENT_TIMESTAMP)`,
-      args: [transactionId, customer_id, staffBranchId, totalAmount, pointsAwarded],
+      sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, vehicle_model, vehicle_number, created_at)
+            VALUES (?, ?, ?, NULL, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)`,
+      args: [transactionId, customer_id, staffBranchId, totalAmount, pointsAwarded, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number],
     });
 
     // Insert Transaction Services

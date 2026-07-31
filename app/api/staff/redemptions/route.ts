@@ -75,6 +75,11 @@ export async function POST(request: Request) {
         sql: `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
               VALUES (?, ?, ?, ?, ?, ?)`,
         args: [redemptionId, customer_id, staffBranchId, staffId, offer_id, requiredPoints],
+      },
+      {
+        sql: `INSERT INTO loyalty_points_ledger (id, customer_id, type, points)
+              VALUES (?, ?, 'redeemed', ?)`,
+        args: [uuidv4(), customer_id, requiredPoints],
       }
     ], "write");
 

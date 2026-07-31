@@ -30,7 +30,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   useEffect(() => {
     const fetchCustomer = async () => {
       try {
-        const res = await fetch(`/api/staff/customers/${id}`);
+        const res = await fetch(`/api/manager/customers/${id}`);
         if (res.ok) {
           const data = await res.json();
           setCustomer(data.customer);
@@ -38,7 +38,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           setLedger(data.ledger || []);
           setStats(data.stats || { totalEarned: 0, totalRedeemed: 0 });
         } else {
-          router.push("/staff/customers");
+          router.push("/manager/customers");
         }
       } catch (e) {
         console.error(e);
@@ -47,7 +47,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     };
     const fetchOffers = async () => {
       try {
-        const res = await fetch(`/api/staff/offers`);
+        const res = await fetch(`/api/manager/offers`);
         if (res.ok) {
           const data = await res.json();
           setOffers(data.offers);
@@ -58,7 +58,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     };
     const fetchServices = async () => {
       try {
-        const res = await fetch(`/api/staff/services`);
+        const res = await fetch(`/api/manager/services`);
         if (res.ok) {
           const data = await res.json();
           setServices(data.services);
@@ -81,7 +81,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     setRedeeming(true);
 
     try {
-      const res = await fetch("/api/staff/redemptions", {
+      const res = await fetch("/api/manager/redemptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customer_id: id, offer_id: offerId })
@@ -108,7 +108,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     setLoggingVisit(true);
 
     try {
-      const res = await fetch("/api/staff/transactions", {
+      const res = await fetch("/api/manager/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customer_id: id, service_ids: selectedServiceIds })
@@ -118,7 +118,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       if (res.ok) {
         setLogVisitSuccess("Visit logged successfully!");
         // Refresh history and ledger
-        const fetchRes = await fetch(`/api/staff/customers/${id}`);
+        const fetchRes = await fetch(`/api/manager/customers/${id}`);
         if (fetchRes.ok) {
             const freshData = await fetchRes.json();
             setHistory(freshData.history);
@@ -168,7 +168,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="flex-1 p-8 lg:p-12 overflow-auto">
-      <Breadcrumbs items={[{ label: "Overview", href: "/staff" }, { label: "Customers", href: "/staff/customers" }, { label: customer.name }]} accentClass="hover:text-accent-copper" />
+      <Breadcrumbs items={[{ label: "Overview", href: "/manager" }, { label: "Customers", href: "/manager/customers" }, { label: customer.name }]} accentClass="hover:text-accent-copper" />
 
       <div className="flex justify-between items-start mb-10">
         <div>

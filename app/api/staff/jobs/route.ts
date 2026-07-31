@@ -2,6 +2,101 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { v4 as uuidv4 } from "uuid";
+
+export async function POST(request: Request) {
+  const session = await getServerSession(authOptions);
+  
+  if (!session || !session.user || !(session.user as any).branch_id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const branchId = (session.user as any).branch_id;
+  const staffId = session.user.id; // person who created it
+
+  try {
+    const body = await request.json();
+    const { 
+      vehicle_make, 
+      vehicle_plate, 
+      service_id, 
+      assigned_to, 
+      customer_name, 
+      customer_phone 
+    } = body;
+
+    if (!vehicle_make || !service_id) {
+      return NextResponse.json({ error: "Vehicle Make and Service Level are required" }, { status: 400 });
+    }
+    
+    if (!customer_name || !customer_phone) {
+      return NextResponse.json({ error: "Customer Name and Phone Number are strictly required" }, { status: 400 });
+    }
+
+    // 1. Get Service details
+    const serviceRes = await db.execute({
+      sql: `SELECT price, points_earned FROM services WHERE id = ? AND is_active = 1`,
+      args: [service_id]
+    });
+    
+    if (serviceRes.rows.length === 0) {
+      return NextResponse.json({ error: "Invalid or inactive service selected" }, { status: 400 });
+    }
+    const service = serviceRes.rows[0];
+
+    // 2. Handle Customer
+    let customerId = uuidv4();
+    const phone = customer_phone.trim();
+    const name = customer_name.trim();
+    const batchStatements = [];
+
+    // Check if customer exists by phone
+    const existingCust = await db.execute({
+      sql: `SELECT id FROM customers WHERE phone = ?`,
+      args: [phone]
+    });
+
+    if (existingCust.rows.length > 0) {
+      customerId = existingCust.rows[0].id as string;
+      // Update their vehicle info
+      batchStatements.push({
+        sql: `UPDATE customers SET vehicle_model = ?, vehicle_number = ? WHERE id = ?`,
+        args: [vehicle_make, vehicle_plate || null, customerId]
+      });
+    } else {
+      // Create new customer
+      batchStatements.push({
+        sql: `INSERT INTO customers (id, phone, name, branch_id, vehicle_model, vehicle_number) VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [customerId, phone, name, branchId, vehicle_make, vehicle_plate || null]
+      });
+    }
+
+    // 3. Create Transaction
+    const transactionId = uuidv4();
+    const assignee = assigned_to || null;
+    
+    batchStatements.push({
+      sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, vehicle_model, vehicle_number)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      args: [transactionId, customerId, branchId, assignee, service.price, service.points_earned, vehicle_make, vehicle_plate || null]
+    });
+
+    // 4. Create Transaction Service mapping
+    const tsId = uuidv4();
+    batchStatements.push({
+      sql: `INSERT INTO transaction_services (id, transaction_id, service_id, price_at_time, points_at_time)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [tsId, transactionId, service_id, service.price, service.points_earned]
+    });
+
+    await db.batch(batchStatements, "write");
+
+    return NextResponse.json({ success: true, transaction_id: transactionId });
+  } catch (error) {
+    console.error("Error creating new work:", error);
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  }
+}
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -92,7 +187,7 @@ export async function PATCH(request: Request) {
 
     // Determine staff_id to set. Implicit claim on first touch.
     const newStaffId = isUnclaimed ? userId : transaction.staff_id;
-    const isClaimingNow = isUnclaimed && newStaffId === userId;
+    const isClaimingNow = (isUnclaimed && newStaffId === userId) || (transaction.status === 'pending' && status === 'in_progress');
     const isFinishingNow = status === 'finished' && transaction.status !== 'finished';
 
     // Execute update
@@ -117,6 +212,11 @@ export async function PATCH(request: Request) {
       batchStatements.push({
         sql: `UPDATE customers SET points_balance = points_balance + ? WHERE id = ?`,
         args: [transaction.points_awarded, transaction.customer_id]
+      });
+      // Add ledger entry
+      batchStatements.push({
+        sql: `INSERT INTO loyalty_points_ledger (id, customer_id, type, points, related_transaction_id) VALUES (?, ?, 'earned', ?, ?)`,
+        args: [uuidv4(), transaction.customer_id, transaction.points_awarded, id]
       });
     }
 

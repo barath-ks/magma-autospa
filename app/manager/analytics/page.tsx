@@ -139,7 +139,7 @@ export default function AnalyticsPage() {
         ) : (
           <>
             {/* Stat Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {/* Profit */}
               <div className={`panel p-6 border-l-[3px] ${isLoss ? 'border-l-accent-oxblood bg-bg-panel-elevated' : 'border-l-[#4ade80]'} hover:bg-bg-panel-elevated transition-colors`}>
                 <div className="flex justify-between items-start mb-4">
@@ -188,6 +188,39 @@ export default function AnalyticsPage() {
                     <span className="text-[10px] uppercase font-bold text-text-secondary w-16">Redeemed:</span>
                     <span className={`font-mono font-bold text-accent-gold whitespace-nowrap tracking-tight ${getFontSize(pointsRedeemedStr)}`}>{pointsRedeemedStr}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Revenue Growth % */}
+              <div className={`panel p-6 border-l-[3px] ${data?.revenueGrowth === null ? 'border-l-accent-gold' : (data?.revenueGrowth >= 0 ? 'border-l-[#4ade80]' : 'border-l-accent-oxblood')} hover:bg-bg-panel-elevated transition-colors`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Rev Growth</div>
+                  {data?.revenueGrowth !== null && <TrendingUp size={16} className={data?.revenueGrowth >= 0 ? 'text-[#4ade80]' : 'text-accent-oxblood'} />}
+                </div>
+                <div className={`${getFontSize(data?.revenueGrowth === null ? 'N/A' : (data?.revenueGrowth || 0).toFixed(1))} font-mono font-bold whitespace-nowrap tracking-tight ${data?.revenueGrowth === null ? 'text-text-secondary' : (data?.revenueGrowth >= 0 ? 'text-[#4ade80]' : 'text-accent-oxblood')}`}>
+                  {data?.revenueGrowth === null ? 'N/A' : `${data?.revenueGrowth > 0 ? '+' : ''}${(data?.revenueGrowth || 0).toFixed(1)}%`}
+                </div>
+              </div>
+
+              {/* Avg Ticket Size */}
+              <div className="panel p-6 border-l-[3px] border-l-accent-gold hover:bg-bg-panel-elevated transition-colors">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Avg Ticket</div>
+                  <DollarSign size={16} className="text-accent-gold" />
+                </div>
+                <div className={`${getFontSize(formatCurrency(data?.avgTicketSize || 0))} font-mono font-bold whitespace-nowrap tracking-tight text-text-primary`}>
+                  {formatCurrency(data?.avgTicketSize || 0)}
+                </div>
+              </div>
+
+              {/* Repeat Visit Rate */}
+              <div className="panel p-6 border-l-[3px] border-l-accent-gold hover:bg-bg-panel-elevated transition-colors">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Repeat Visits</div>
+                  <UserPlus size={16} className="text-accent-gold" />
+                </div>
+                <div className={`${getFontSize((data?.repeatVisitRate || 0).toFixed(1))} font-mono font-bold whitespace-nowrap tracking-tight text-text-primary`}>
+                  {(data?.repeatVisitRate || 0).toFixed(1)}%
                 </div>
               </div>
 
