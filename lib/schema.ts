@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS branches (
   id TEXT PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
   location TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   branch_id TEXT,
   must_change_password BOOLEAN DEFAULT 1,
+  is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
 );
@@ -116,6 +118,7 @@ CREATE TABLE IF NOT EXISTS shift_requests (
   status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
   staff_note TEXT,
   manager_note TEXT,
+  staff_viewed BOOLEAN DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   reviewed_at DATETIME,
   FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE CASCADE,

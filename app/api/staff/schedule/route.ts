@@ -30,6 +30,14 @@ export async function GET(request: Request) {
       args: [staffId],
     });
 
+    // 3. Mark newly resolved requests as viewed
+    await db.execute({
+      sql: `UPDATE shift_requests 
+            SET staff_viewed = 1 
+            WHERE staff_id = ? AND status != 'pending' AND staff_viewed = 0`,
+      args: [staffId],
+    });
+
     return NextResponse.json({
       upcoming: upcomingResult.rows,
       requests: pendingResult.rows
@@ -55,6 +63,11 @@ export async function POST(request: Request) {
 
     if (!requested_date || !start_time || !end_time) {
       return NextResponse.json({ error: "Date and times are required" }, { status: 400 });
+    }
+
+    const shiftStart = new Date(`${requested_date}T${start_time}`);
+    if (shiftStart.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "Shift requests must be submitted at least 24 hours in advance" }, { status: 400 });
     }
 
     const id = crypto.randomUUID();

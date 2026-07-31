@@ -83,7 +83,7 @@ export default function AnalyticsPage() {
   const txStr = String(data?.txCount || 0);
   const customersStr = String(data?.newCustomers || 0);
   const pointsAwardedStr = `+${data?.pointsAwarded || 0}`;
-  const pointsRedeemedStr = `-${data?.pointsRedeemed || 0}`;
+  const pointsRedeemedStr = data?.pointsRedeemed ? `-${data.pointsRedeemed}` : '0';
 
   const getFontSize = (str: string) => {
     if (str.length >= 11) return "text-base lg:text-sm xl:text-lg";

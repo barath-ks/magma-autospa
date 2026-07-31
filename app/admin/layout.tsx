@@ -16,7 +16,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <div className="min-h-screen bg-bg-base font-sans text-text-primary flex selection:bg-accent-oxblood/30">
+    <div className="h-screen overflow-hidden bg-bg-base font-sans text-text-primary flex selection:bg-accent-oxblood/30">
       {/* Sidebar Navigation */}
       <aside className="w-64 bg-bg-panel border-r border-border-hairline flex flex-col hidden md:flex">
         <div className="p-6 border-b border-border-hairline">

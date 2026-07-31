@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const { id } = await props.params;
   const session = await getServerSession(authOptions);
   if (!session || !session.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,8 +16,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   try {
     const branchRes = await db.execute({
-      sql: "SELECT id, name, location FROM branches WHERE id = ?",
-      args: [params.id]
+      sql: "SELECT id, name, location, is_active FROM branches WHERE id = ?",
+      args: [id]
     });
 
     if (branchRes.rows.length === 0) {
@@ -28,9 +29,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const usersRes = await db.execute({
       sql: `SELECT id, login_id, name, role, phone, email, created_at 
             FROM users 
-            WHERE branch_id = ? AND role IN ('staff', 'manager')
+            WHERE branch_id = ? AND role IN ('staff', 'manager') AND is_active = 1
             ORDER BY role, created_at DESC`,
-      args: [params.id]
+      args: [id]
     });
 
     return NextResponse.json({ branch, users: usersRes.rows });

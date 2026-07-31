@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -6,7 +7,15 @@ import { Users, LayoutDashboard, Activity, Calendar, ListOrdered } from "lucide-
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  
+  const [badgeCount, setBadgeCount] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/notifications")
+      .then(r => r.json())
+      .then(data => setBadgeCount(data.managerScheduleBadge || 0))
+      .catch(e => console.error(e));
+  }, [pathname]);
+
   const linkClass = (path: string) => {
     const isActive = pathname === path;
     if (isActive) {
@@ -16,7 +25,7 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
   };
 
   return (
-    <div className="min-h-screen bg-bg-base font-sans text-text-primary flex selection:bg-accent-gold/30">
+    <div className="h-screen overflow-hidden bg-bg-base font-sans text-text-primary flex selection:bg-accent-gold/30">
       {/* Sidebar Navigation */}
       <aside className="w-64 bg-bg-panel border-r border-border-hairline flex flex-col hidden md:flex">
         <div className="p-6 border-b border-border-hairline">
@@ -34,7 +43,13 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
             <LayoutDashboard size={16} /> Overview
           </Link>
           <Link href="/manager/schedule" className={linkClass("/manager/schedule")}>
-            <Calendar size={16} /> Schedule
+            <Calendar size={16} /> 
+            <span className="flex-1">Schedule</span>
+            {badgeCount > 0 && (
+              <span className="bg-accent-oxblood text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                {badgeCount}
+              </span>
+            )}
           </Link>
           <Link href="/manager/analytics" className={linkClass("/manager/analytics")}>
             <Activity size={16} /> Branch Analytics

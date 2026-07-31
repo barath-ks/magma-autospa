@@ -134,6 +134,13 @@ function NewRequestModal({ onClose, onSuccess }: { onClose: () => void, onSucces
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    
+    const shiftStart = new Date(`${formData.requested_date}T${formData.start_time}`);
+    if (shiftStart.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+      setError("Shift requests must be submitted at least 24 hours in advance.");
+      return;
+    }
+
     setLoading(true);
     const res = await fetch("/api/staff/schedule", {
       method: "POST",
@@ -160,7 +167,7 @@ function NewRequestModal({ onClose, onSuccess }: { onClose: () => void, onSucces
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Date *</label>
-            <input required type="date" value={formData.requested_date} onChange={e=>setFormData({...formData, requested_date: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors [color-scheme:dark]" />
+            <input required type="date" min={new Date(Date.now() + 24 * 3600 * 1000 - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]} value={formData.requested_date} onChange={e=>setFormData({...formData, requested_date: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors [color-scheme:dark]" />
           </div>
           <div className="grid grid-cols-2 gap-5">
             <div>

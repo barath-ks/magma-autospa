@@ -30,6 +30,11 @@ export default function BranchDetailPage() {
   const [error, setError] = useState("");
   const [createdUser, setCreatedUser] = useState<any>(null);
 
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+
   const fetchBranchData = async () => {
     try {
       const res = await fetch(`/api/admin/branches/${branchId}`);
@@ -89,6 +94,44 @@ export default function BranchDetailPage() {
     setSubmitting(false);
   };
 
+  const handleRequestDelete = async () => {
+    try {
+      const res = await fetch(`/api/admin/branches/${branchId}/request-delete`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setShowOtpModal(true);
+        setOtpError("");
+        setOtpCode("");
+      } else {
+        alert(data.error || "Failed to request deletion");
+      }
+    } catch (e) {
+      alert("An error occurred");
+    }
+  };
+
+  const handleConfirmDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOtpLoading(true);
+    setOtpError("");
+    try {
+      const res = await fetch(`/api/admin/branches/${branchId}/confirm-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otp: otpCode })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = "/admin/branches";
+      } else {
+        setOtpError(data.error || "Failed to delete branch");
+      }
+    } catch (e) {
+      setOtpError("An error occurred");
+    }
+    setOtpLoading(false);
+  };
+
   // Client-side hard block for non-Admins
   if (status === "loading" || loading) {
     return <main className="flex-1 p-8 lg:p-12"><p className="text-text-secondary text-sm uppercase tracking-widest font-mono animate-pulse">Loading...</p></main>;
@@ -115,17 +158,32 @@ export default function BranchDetailPage() {
       <div className="w-full max-w-5xl mx-auto mb-8 flex justify-between items-end">
         <div>
           <Breadcrumbs items={[{ label: "System", href: "/admin" }, { label: "Branches", href: "/admin/branches" }, { label: branch?.name || "Branch" }]} accentClass="hover:text-accent-oxblood" />
-          <h1 className="text-3xl font-semibold text-text-primary mt-2">{branch?.name}</h1>
+          <h1 className="text-3xl font-semibold text-text-primary mt-2">
+            {branch?.name}
+            {branch?.is_active === 0 && (
+              <span className="ml-3 text-xs bg-bg-panel border border-border-hairline px-2 py-1 uppercase tracking-widest text-text-secondary align-middle">
+                Deleted
+              </span>
+            )}
+          </h1>
           <p className="text-text-secondary mt-1 text-sm uppercase tracking-wider">{branch?.location}</p>
         </div>
         
-        {activeTab === "details" && (
-          <button 
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-accent-oxblood text-white font-bold uppercase tracking-widest text-xs px-6 py-3 flex items-center gap-2 hover:opacity-90 transition-opacity"
-          >
-            <Plus size={16} /> Add Account
-          </button>
+        {activeTab === "details" && branch?.is_active !== 0 && (
+          <div className="flex gap-4 items-center">
+            <button 
+              onClick={handleRequestDelete}
+              className="bg-bg-panel border border-border-hairline text-accent-oxblood font-bold uppercase tracking-widest text-xs px-6 py-3 hover:bg-accent-oxblood hover:text-white transition-colors"
+            >
+              Delete Branch
+            </button>
+            <button 
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="bg-accent-oxblood text-white font-bold uppercase tracking-widest text-xs px-6 py-3 flex items-center gap-2 hover:opacity-90 transition-opacity"
+            >
+              <Plus size={16} /> Add Account
+            </button>
+          </div>
         )}
         
         {activeTab === "financials" && (
@@ -294,6 +352,40 @@ export default function BranchDetailPage() {
             <button onClick={() => setCreatedUser(null)} className="w-full py-4 bg-bg-panel-elevated text-text-primary font-bold uppercase tracking-widest text-xs hover:bg-border-hairline transition-colors">
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-bg-base/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="panel p-8 w-full max-w-md border-l-[3px] border-l-accent-oxblood">
+            <h2 className="text-xl font-semibold mb-2 text-text-primary">Verify Branch Deletion</h2>
+            <p className="text-xs text-text-secondary mb-6 uppercase tracking-widest leading-relaxed">
+              Enter the 6-digit OTP sent to your registered phone number.
+            </p>
+            {otpError && <div className="text-[#ff6b6b] bg-[#3a1616] p-3 text-xs font-bold uppercase tracking-widest mb-4">{otpError}</div>}
+            <form onSubmit={handleConfirmDelete} className="space-y-6">
+              <div>
+                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">OTP Code</label>
+                <input 
+                  type="text" 
+                  maxLength={6}
+                  required 
+                  value={otpCode} 
+                  onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  className="w-full bg-bg-base border border-border-hairline p-4 text-center text-2xl tracking-[0.5em] text-text-primary font-mono focus:border-accent-oxblood focus:outline-none" 
+                  placeholder="000000"
+                />
+              </div>
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setShowOtpModal(false)} className="flex-1 py-3 bg-bg-panel text-text-secondary text-xs uppercase tracking-widest font-bold hover:text-text-primary transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={otpLoading || otpCode.length < 6} className="flex-1 py-3 bg-accent-oxblood text-white text-xs uppercase tracking-widest font-bold hover:opacity-90 disabled:opacity-50 transition-opacity">
+                  {otpLoading ? "Verifying..." : "Confirm Delete"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

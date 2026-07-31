@@ -24,6 +24,7 @@ export async function GET(request: Request) {
         b.id as branch_id,
         b.name as branch_name,
         b.location as location,
+        b.is_active as is_active,
         COALESCE(SUM(t.total_amount), 0) as revenue,
         COALESCE(
           (SELECT SUM(amount) FROM branch_expenses e WHERE e.branch_id = b.id AND e.created_at >= datetime('now', ${dateModifier})),
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
       branch_id: row.branch_id,
       branch_name: row.branch_name,
       location: row.location,
+      is_active: Boolean(row.is_active),
       revenue: row.revenue,
       expense: row.expense,
       profit: row.revenue - row.expense

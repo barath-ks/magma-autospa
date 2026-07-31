@@ -80,7 +80,7 @@ export async function PATCH(request: Request) {
     // Update the request
     await db.execute({
       sql: `UPDATE shift_requests 
-            SET status = ?, manager_note = ?, reviewed_at = CURRENT_TIMESTAMP
+            SET status = ?, manager_note = ?, reviewed_at = CURRENT_TIMESTAMP, staff_viewed = 0
             WHERE id = ?`,
       args: [status, manager_note || null, id],
     });

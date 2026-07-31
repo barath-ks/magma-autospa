@@ -25,7 +25,7 @@ export const authOptions: NextAuthOptions = {
 
         try {
           const result = await db.execute({
-            sql: "SELECT * FROM users WHERE login_id = ?",
+            sql: "SELECT * FROM users WHERE login_id = ? AND is_active = 1",
             args: [credentials.login_id],
           });
 

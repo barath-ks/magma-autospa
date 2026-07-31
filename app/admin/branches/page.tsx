@@ -9,6 +9,7 @@ export default function BranchesPage() {
   const [range, setRange] = useState("month");
   const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reactivating, setReactivating] = useState<string | null>(null);
   
   // Add Branch State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -101,6 +102,25 @@ export default function BranchesPage() {
     setSubmittingEdit(false);
   };
 
+  const handleReactivate = async (branchId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setReactivating(branchId);
+    try {
+      const res = await fetch(`/api/admin/branches/${branchId}/reactivate`, { method: "POST" });
+      if (res.ok) {
+        fetchBranches();
+      } else {
+        alert("Failed to reactivate branch");
+      }
+    } catch (err) {
+      alert("Error reactivating branch");
+    }
+    setReactivating(null);
+  };
+
+  const activeBranches = branches.filter(b => b.is_active !== false);
+  const deletedBranches = branches.filter(b => b.is_active === false);
+
   return (
     <main className="flex-1 p-8 lg:p-12 overflow-auto flex flex-col h-full">
       <div className="w-full max-w-6xl mx-auto mb-8 flex justify-between items-end">
@@ -191,8 +211,9 @@ export default function BranchesPage() {
         )}
 
         {loading ? <p className="text-text-secondary text-sm uppercase tracking-widest font-mono animate-pulse">Loading branches...</p> : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {branches.map(branch => {
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {activeBranches.map(branch => {
               const isEditing = editingId === branch.branch_id;
               const isLoss = branch.profit < 0;
               
@@ -254,7 +275,47 @@ export default function BranchesPage() {
                 </Link>
               );
             })}
-          </div>
+            </div>
+
+            {deletedBranches.length > 0 && (
+              <div className="mt-12">
+                <h2 className="text-lg font-semibold text-text-primary mb-6 border-b border-border-hairline pb-2">Deleted Branches</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 opacity-60 hover:opacity-100 transition-opacity">
+                  {deletedBranches.map(branch => (
+                    <div key={branch.branch_id} className="block panel p-6 bg-bg-panel-elevated relative">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 rounded bg-bg-base border border-border-hairline flex items-center justify-center grayscale">
+                          <Building size={20} className="text-text-secondary" />
+                        </div>
+                        <button 
+                          onClick={(e) => handleReactivate(branch.branch_id, e)}
+                          disabled={reactivating === branch.branch_id}
+                          className="bg-bg-base border border-border-hairline px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-text-secondary hover:text-white hover:bg-accent-oxblood transition-colors"
+                        >
+                          {reactivating === branch.branch_id ? "..." : "Reactivate"}
+                        </button>
+                      </div>
+                      <h3 className="text-lg font-semibold text-text-primary mb-1 pr-8 line-through">{branch.branch_name}</h3>
+                      <p className="text-xs font-mono text-text-secondary uppercase tracking-widest mb-6">{branch.location}</p>
+                      
+                      <div className="grid grid-cols-2 gap-4 border-t border-border-hairline pt-4">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Revenue</div>
+                          <div className="font-mono text-sm text-text-primary">{formatCurrency(branch.revenue)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Profit</div>
+                          <div className="font-mono font-bold text-sm text-text-secondary">
+                            {formatCurrency(branch.profit)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
