@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Activity, DollarSign, ListOrdered, Award, UserPlus } from "lucide-react";
+import { Activity, DollarSign, ListOrdered, Award, UserPlus, TrendingUp } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { formatCurrency } from "@/lib/format";
 
@@ -75,6 +75,21 @@ export default function AnalyticsPage() {
   };
 
   const hasData = data && data.txCount > 0;
+  const profit = (data?.revenue || 0) - totalExpenses;
+  const isLoss = profit < 0;
+
+  const profitStr = formatCurrency(profit);
+  const revenueStr = formatCurrency(data?.revenue || 0);
+  const txStr = String(data?.txCount || 0);
+  const customersStr = String(data?.newCustomers || 0);
+  const pointsAwardedStr = `+${data?.pointsAwarded || 0}`;
+  const pointsRedeemedStr = `-${data?.pointsRedeemed || 0}`;
+
+  const getFontSize = (str: string) => {
+    if (str.length >= 11) return "text-base lg:text-sm xl:text-lg";
+    if (str.length >= 8) return "text-lg lg:text-base xl:text-xl";
+    return "text-2xl lg:text-xl xl:text-2xl";
+  };
 
   return (
     <main className="flex-1 p-8 lg:p-12 overflow-auto flex flex-col items-center h-full">
@@ -124,15 +139,26 @@ export default function AnalyticsPage() {
         ) : (
           <>
             {/* Stat Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+              {/* Profit */}
+              <div className={`panel p-6 border-l-[3px] ${isLoss ? 'border-l-accent-oxblood bg-bg-panel-elevated' : 'border-l-[#4ade80]'} hover:bg-bg-panel-elevated transition-colors`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Profit Margin</div>
+                  <TrendingUp size={16} className={isLoss ? 'text-accent-oxblood' : 'text-[#4ade80]'} />
+                </div>
+                <div className={`${getFontSize(profitStr)} font-mono font-bold whitespace-nowrap tracking-tight ${isLoss ? 'text-accent-oxblood' : 'text-[#4ade80]'}`}>
+                  {profitStr}
+                </div>
+              </div>
+
               {/* Revenue */}
               <div className="panel p-6 border-l-[3px] border-l-accent-gold hover:bg-bg-panel-elevated transition-colors">
                 <div className="flex justify-between items-start mb-4">
                   <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Revenue</div>
                   <DollarSign size={16} className="text-accent-gold" />
                 </div>
-                <div className="text-3xl font-mono font-bold text-text-primary">
-                  {formatCurrency(data.revenue)}
+                <div className={`${getFontSize(revenueStr)} font-mono font-bold whitespace-nowrap tracking-tight text-text-primary`}>
+                  {revenueStr}
                 </div>
               </div>
               
@@ -142,8 +168,8 @@ export default function AnalyticsPage() {
                   <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Transactions</div>
                   <ListOrdered size={16} className="text-accent-gold" />
                 </div>
-                <div className="text-3xl font-mono font-bold text-text-primary">
-                  {data.txCount}
+                <div className={`${getFontSize(txStr)} font-mono font-bold whitespace-nowrap tracking-tight text-text-primary`}>
+                  {txStr}
                 </div>
               </div>
 
@@ -153,14 +179,14 @@ export default function AnalyticsPage() {
                   <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">Loyalty Points</div>
                   <Award size={16} className="text-accent-gold" />
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 w-full">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] uppercase font-bold text-text-secondary w-16">Awarded:</span>
-                    <span className="font-mono font-bold text-text-primary">+{data.pointsAwarded}</span>
+                    <span className={`font-mono font-bold text-text-primary whitespace-nowrap tracking-tight ${getFontSize(pointsAwardedStr)}`}>{pointsAwardedStr}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] uppercase font-bold text-text-secondary w-16">Redeemed:</span>
-                    <span className="font-mono font-bold text-accent-gold">-{data.pointsRedeemed || 0}</span>
+                    <span className={`font-mono font-bold text-accent-gold whitespace-nowrap tracking-tight ${getFontSize(pointsRedeemedStr)}`}>{pointsRedeemedStr}</span>
                   </div>
                 </div>
               </div>
@@ -171,8 +197,8 @@ export default function AnalyticsPage() {
                   <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary">New Customers</div>
                   <UserPlus size={16} className="text-accent-gold" />
                 </div>
-                <div className="text-3xl font-mono font-bold text-text-primary">
-                  {data.newCustomers}
+                <div className={`${getFontSize(customersStr)} font-mono font-bold whitespace-nowrap tracking-tight text-text-primary`}>
+                  {customersStr}
                 </div>
               </div>
             </div>

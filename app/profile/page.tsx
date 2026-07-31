@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Lock, User as UserIcon, Clock, XCircle, AlertCircle, Phone, Mail, Save } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import PasswordStrengthIndicator from "@/components/PasswordStrengthIndicator";
 
 export default function ProfilePage() {
   const { data: session } = useSession();
@@ -236,6 +237,7 @@ export default function ProfilePage() {
               <div>
                 <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">New Password</label>
                 <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                <PasswordStrengthIndicator password={newPassword} />
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Confirm New Password</label>

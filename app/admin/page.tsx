@@ -233,7 +233,12 @@ function ResetPasswordModal({ user, onClose, onSuccess }: any) {
     if (res.ok) {
       onSuccess();
     } else {
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { error: "Server returned an invalid response." };
+      }
       setError(data.error || "System Error");
       setSaving(false);
     }

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../../../../lib/auth";
-import { db } from "../../../../../lib/db";
+import { authOptions } from "@/lib/auth";
+import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { checkPasswordReuse } from "@/lib/password-history";
+import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (session?.user?.role !== "admin") {
+  if ((session?.user as any)?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest) {
     
     // Prevent editing admins
     const targetUser = await db.execute({
-      sql: "SELECT role FROM users WHERE id = ?",
+      sql: "SELECT role, password_hash FROM users WHERE id = ?",
       args: [userId]
     });
     
@@ -23,17 +25,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Cannot reset admin accounts or invalid user." }, { status: 403 });
     }
 
+    const isReused = await checkPasswordReuse(userId, newPassword, targetUser.rows[0].password_hash as string);
+    if (isReused) {
+      return NextResponse.json({ error: "This password has been used before, please choose a different one" }, { status: 400 });
+    }
+
     // 1. Hash the new password provided by the Admin
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     const mustChange = requirePasswordChange ? 1 : 0;
 
     // 2. Save it securely to the database alongside the must_change_password flag
-    await db.execute({
-      sql: `UPDATE users 
-            SET password_hash = ?, login_id = ?, must_change_password = ? 
-            WHERE id = ?`,
-      args: [hashedPassword, newLoginId, mustChange, userId]
-    });
+    await db.batch([
+      {
+        sql: "INSERT INTO password_history (id, user_id, password_hash) VALUES (?, ?, ?)",
+        args: [uuidv4(), userId, hashedPassword]
+      },
+      {
+        sql: `UPDATE users 
+              SET password_hash = ?, login_id = ?, must_change_password = ? 
+              WHERE id = ?`,
+        args: [hashedPassword, newLoginId, mustChange, userId]
+      }
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

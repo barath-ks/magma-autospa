@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { ShieldAlert } from "lucide-react";
+import PasswordStrengthIndicator from "@/components/PasswordStrengthIndicator";
 
 export default function ForceChangePassword() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -82,6 +83,7 @@ export default function ForceChangePassword() {
               className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
               required 
             />
+            <PasswordStrengthIndicator password={newPassword} />
           </div>
           
           <div>

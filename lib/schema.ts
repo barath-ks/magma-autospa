@@ -22,6 +22,15 @@ CREATE TABLE IF NOT EXISTS users (
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
 );
 
+-- Password History Table
+CREATE TABLE IF NOT EXISTS password_history (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Customers Table
 CREATE TABLE IF NOT EXISTS customers (
   id TEXT PRIMARY KEY,
