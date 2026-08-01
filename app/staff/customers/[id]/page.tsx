@@ -2,7 +2,7 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Car, Phone, Award, Clock } from "lucide-react";
+import { ArrowLeft, Car, Phone, Award, Clock, Pencil } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { formatCurrency } from "@/lib/format";
 
@@ -13,6 +13,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true);
   const [offers, setOffers] = useState<any[]>([]);
   const [showRedeemModal, setShowRedeemModal] = useState(false);
+  const [redeemStep, setRedeemStep] = useState<1 | 2>(1);
+  const [selectedOfferId, setSelectedOfferId] = useState<string>("");
+  const [otp, setOtp] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState("");
   const [redeemSuccess, setRedeemSuccess] = useState("");
@@ -22,6 +25,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [loggingVisit, setLoggingVisit] = useState(false);
   const [logVisitError, setLogVisitError] = useState("");
   const [logVisitSuccess, setLogVisitSuccess] = useState("");
+  const [showEditModal, setShowEditModal] = useState(false);
   const [ledger, setLedger] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ totalEarned: 0, totalRedeemed: 0 });
   
@@ -75,13 +79,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     }
   }, [id, router]);
 
-  const handleRedeem = async (offerId: string) => {
+  const handleRequestOTP = async (offerId: string) => {
     setRedeemError("");
     setRedeemSuccess("");
     setRedeeming(true);
+    setSelectedOfferId(offerId);
 
     try {
-      const res = await fetch("/api/staff/redemptions", {
+      const res = await fetch("/api/staff/redemptions/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customer_id: id, offer_id: offerId })
@@ -89,14 +94,56 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       const data = await res.json();
       
       if (res.ok) {
-        setRedeemSuccess("Reward redeemed successfully!");
-        setCustomer({ ...customer, points_balance: data.new_balance });
-        setTimeout(() => setShowRedeemModal(false), 1500);
+        setRedeemSuccess("Verification code sent to customer's email.");
+        setRedeemStep(2);
       } else {
-        setRedeemError(data.error || "Failed to redeem reward.");
+        setRedeemError(data.error || "Failed to request OTP.");
       }
     } catch (e) {
-      setRedeemError("System error during redemption.");
+      setRedeemError("System error during request.");
+    }
+    setRedeeming(false);
+  };
+
+  const handleConfirmRedemption = async () => {
+    if (!otp) {
+      setRedeemError("Please enter the verification code.");
+      return;
+    }
+    setRedeemError("");
+    setRedeemSuccess("");
+    setRedeeming(true);
+
+    try {
+      const res = await fetch("/api/staff/redemptions/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: id, offer_id: selectedOfferId, otp })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setRedeemSuccess("Reward redeemed successfully!");
+        setCustomer({ ...customer, points_balance: data.new_balance });
+        // Refresh ledger and history
+        const fetchRes = await fetch(`/api/staff/customers/${id}`);
+        if (fetchRes.ok) {
+            const freshData = await fetchRes.json();
+            setHistory(freshData.history);
+            setLedger(freshData.ledger || []);
+            setStats(freshData.stats || { totalEarned: 0, totalRedeemed: 0 });
+        }
+        setTimeout(() => {
+          setShowRedeemModal(false);
+          setRedeemStep(1);
+          setOtp("");
+          setSelectedOfferId("");
+        }, 1500);
+      } else {
+        setRedeemError(data.error || "Failed to verify code.");
+      }
+    } catch (e) {
+      setRedeemError("System error during confirmation.");
     }
     setRedeeming(false);
   };
@@ -180,12 +227,20 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </p>
           )}
         </div>
-        <button 
-          onClick={() => setShowLogVisitModal(true)}
-          className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-text-primary text-bg-base hover:bg-opacity-90 transition-colors"
-        >
-          Log Visit
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowEditModal(true)}
+            className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-bg-panel border border-border-hairline text-text-secondary hover:text-text-primary hover:border-accent-copper transition-colors flex items-center gap-2"
+          >
+            <Pencil size={12} /> Edit Profile
+          </button>
+          <button 
+            onClick={() => setShowLogVisitModal(true)}
+            className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-text-primary text-bg-base hover:bg-opacity-90 transition-colors"
+          >
+            Log Visit
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -194,6 +249,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-secondary flex items-center gap-1.5 mb-2"><Phone size={12}/> Contact</div>
               <div className="font-mono text-xl text-text-primary">{customer.phone}</div>
+              {customer.email && <div className="text-sm text-text-secondary mt-1">{customer.email}</div>}
             </div>
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-secondary flex items-center gap-1.5 mb-2"><Car size={12}/> Vehicle</div>
@@ -328,37 +384,77 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             {redeemError && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-4 p-3">{redeemError}</div>}
             {redeemSuccess && <div className="text-[#4ade80] bg-[#163a24] border border-[#1d5230] text-xs uppercase tracking-widest font-bold mb-4 p-3">{redeemSuccess}</div>}
 
-            <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-2">
-              {offers.length === 0 ? (
-                <div className="p-4 text-center text-text-secondary text-xs uppercase tracking-widest border border-border-hairline border-dashed">
-                  No offers configured for this branch.
-                </div>
-              ) : (
-                offers.map(offer => {
-                  const canAfford = customer.points_balance >= offer.points_required;
-                  return (
-                    <div 
-                      key={offer.id} 
-                      className={`p-4 border flex justify-between items-center transition-colors ${
-                        canAfford 
-                          ? "border-border-hairline hover:border-accent-copper bg-bg-panel hover:bg-bg-panel-elevated cursor-pointer" 
-                          : "border-border-hairline/30 bg-bg-base opacity-50 cursor-not-allowed"
-                      }`}
-                      onClick={() => { if (canAfford && !redeeming) handleRedeem(offer.id); }}
-                    >
-                      <div className="text-sm font-medium text-text-primary">{offer.name}</div>
-                      <div className={`font-mono text-xs font-bold ${canAfford ? 'text-accent-copper' : 'text-text-secondary'}`}>
-                        {offer.points_required} pts
+            {redeemStep === 1 ? (
+              <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-2">
+                {offers.length === 0 ? (
+                  <div className="p-4 text-center text-text-secondary text-xs uppercase tracking-widest border border-border-hairline border-dashed">
+                    No offers configured for this branch.
+                  </div>
+                ) : (
+                  offers.map(offer => {
+                    const canAfford = customer.points_balance >= offer.points_required;
+                    return (
+                      <div 
+                        key={offer.id} 
+                        className={`p-4 border flex justify-between items-center transition-colors ${
+                          canAfford 
+                            ? "border-border-hairline hover:border-accent-copper bg-bg-panel hover:bg-bg-panel-elevated cursor-pointer" 
+                            : "border-border-hairline/30 bg-bg-base opacity-50 cursor-not-allowed"
+                        }`}
+                        onClick={() => { if (canAfford && !redeeming) handleRequestOTP(offer.id); }}
+                      >
+                        <div className="text-sm font-medium text-text-primary">{offer.name}</div>
+                        <div className="flex items-center gap-4">
+                          <div className={`font-mono text-xs font-bold ${canAfford ? 'text-accent-copper' : 'text-text-secondary'}`}>
+                            {offer.points_required} pts
+                          </div>
+                          {canAfford && (
+                            <div className="text-[10px] uppercase font-bold tracking-widest text-text-secondary opacity-0 group-hover:opacity-100">
+                              Send Code &rarr;
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1.5">Verification Code *</label>
+                  <input 
+                    type="text" 
+                    value={otp} 
+                    onChange={e => setOtp(e.target.value)} 
+                    placeholder="Enter 6-digit code" 
+                    className="block w-full bg-bg-base border border-border-hairline p-3 text-text-primary text-sm font-mono tracking-widest focus:border-accent-copper focus:outline-none"
+                    maxLength={6}
+                  />
+                  <p className="text-[10px] text-text-secondary mt-2">Ask the customer for the code sent to their email.</p>
+                </div>
+                <button 
+                  onClick={handleConfirmRedemption}
+                  disabled={redeeming || otp.length < 6}
+                  className="w-full py-3 font-bold text-xs uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 transition-colors disabled:opacity-50"
+                >
+                  {redeeming ? "Verifying..." : "Confirm Redemption"}
+                </button>
+              </div>
+            )}
 
-            <div className="flex justify-end pt-4 border-t border-border-hairline">
+            <div className="flex justify-between items-center pt-4 border-t border-border-hairline">
+              {redeemStep === 2 ? (
+                <button 
+                  onClick={() => { setRedeemStep(1); setRedeemError(""); setRedeemSuccess(""); }}
+                  disabled={redeeming}
+                  className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
+                >
+                  &larr; Back
+                </button>
+              ) : <div></div>}
               <button 
-                onClick={() => setShowRedeemModal(false)}
+                onClick={() => { setShowRedeemModal(false); setRedeemStep(1); setOtp(""); }}
                 disabled={redeeming}
                 className="px-6 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
               >
@@ -455,6 +551,93 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
       )}
+      {showEditModal && (
+        <EditCustomerModal 
+          customer={customer}
+          onClose={() => setShowEditModal(false)} 
+          onSuccess={(updatedCustomer) => { 
+            setShowEditModal(false); 
+            setCustomer({ ...customer, ...updatedCustomer }); 
+          }} 
+        />
+      )}
     </main>
+  );
+}
+
+function EditCustomerModal({ customer, onClose, onSuccess }: { customer: any, onClose: () => void, onSuccess: (c: any) => void }) {
+  const [formData, setFormData] = useState({ 
+    name: customer.name || "", 
+    phone: customer.phone || "", 
+    email: customer.email || "", 
+    vehicle_number: customer.vehicle_number || "", 
+    vehicle_model: customer.vehicle_model || "" 
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/staff/customers/${customer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSuccess(formData);
+      } else {
+        setError(data.error || "System Error");
+      }
+    } catch (err) {
+      setError("System error during request.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="panel border-l-[3px] border-l-accent-copper p-8 w-full max-w-lg">
+        <h3 className="text-xl font-semibold mb-2 text-text-primary">Edit Profile</h3>
+        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Update customer details</p>
+        
+        {error && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-6 p-3">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-2 gap-5">
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Full Name *</label>
+              <input required type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Phone Number *</label>
+              <input required type="tel" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Email Address *</label>
+              <input required type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Number</label>
+              <input type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors uppercase" />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Model</label>
+              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" placeholder="e.g. Porsche 911 GT3" />
+            </div>
+          </div>
+          
+          <div className="mt-8 flex justify-end gap-4 pt-4 border-t border-border-hairline">
+            <button type="button" onClick={onClose} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
+            <button type="submit" disabled={loading} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
+              {loading ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

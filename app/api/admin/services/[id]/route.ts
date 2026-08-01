@@ -3,18 +3,18 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   
   if (!session || !session.user || (session.user as any).role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const { id } = params;
+  const { id } = await context.params;
 
   try {
     const body = await request.json();
-    const { name, description, price, points_earned, is_active } = body;
+    const { name, description, price, is_active } = body;
 
     if (price !== undefined && Number(price) <= 0) {
       return NextResponse.json({ error: "Price must be greater than 0" }, { status: 400 });
@@ -27,7 +27,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (name !== undefined) { updates.push("name = ?"); args.push(name); }
     if (description !== undefined) { updates.push("description = ?"); args.push(description); }
     if (price !== undefined) { updates.push("price = ?"); args.push(Number(price)); }
-    if (points_earned !== undefined) { updates.push("points_earned = ?"); args.push(Number(points_earned)); }
     if (is_active !== undefined) { updates.push("is_active = ?"); args.push(is_active ? 1 : 0); }
 
     if (updates.length === 0) {
@@ -42,20 +41,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating service:", error);
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   
   if (!session || !session.user || (session.user as any).role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const { id } = params;
+  const { id } = await context.params;
 
   try {
     // Soft delete

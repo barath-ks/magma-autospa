@@ -15,7 +15,6 @@ export default function ServicesPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
-  const [pointsEarned, setPointsEarned] = useState("0");
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
@@ -39,7 +38,6 @@ export default function ServicesPage() {
     setName("");
     setDescription("");
     setPrice("");
-    setPointsEarned("0");
     setIsActive(true);
     setModalOpen(true);
   };
@@ -49,8 +47,7 @@ export default function ServicesPage() {
     setName(service.name);
     setDescription(service.description);
     setPrice(service.price.toString());
-    setPointsEarned(service.points_earned.toString());
-    setIsActive(Boolean(service.is_active));
+        setIsActive(Boolean(service.is_active));
     setModalOpen(true);
   };
 
@@ -62,8 +59,7 @@ export default function ServicesPage() {
       name, 
       description, 
       price: Number(price), 
-      points_earned: Number(pointsEarned),
-      is_active: isActive 
+            is_active: isActive 
     };
 
     try {
@@ -123,8 +119,7 @@ export default function ServicesPage() {
               <tr>
                 <th className="p-4">Name & Description</th>
                 <th className="p-4">Price</th>
-                <th className="p-4">Points Earned</th>
-                <th className="p-4">Status</th>
+                                <th className="p-4">Status</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -136,8 +131,7 @@ export default function ServicesPage() {
                     <div className="text-[10px] text-text-secondary mt-1 uppercase tracking-wider">{s.description || "No description"}</div>
                   </td>
                   <td className="p-4 font-mono text-sm text-text-primary">{formatCurrency(s.price)}</td>
-                  <td className="p-4 font-mono text-sm text-accent-gold">+{s.points_earned}</td>
-                  <td className="p-4">
+                                    <td className="p-4">
                     {s.is_active ? 
                       <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-[#4ade80]"><CheckCircle2 size={12}/> Active</span> : 
                       <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-text-secondary"><XCircle size={12}/> Inactive</span>
@@ -176,10 +170,6 @@ export default function ServicesPage() {
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Price (₹) *</label>
                   <input required type="number" step="0.01" min="0.01" value={price} onChange={e=>setPrice(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Points Earned *</label>
-                  <input required type="number" min="0" value={pointsEarned} onChange={e=>setPointsEarned(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
                 </div>
               </div>
               {editingService && (

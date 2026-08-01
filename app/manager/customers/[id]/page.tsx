@@ -2,7 +2,7 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Car, Phone, Award, Clock } from "lucide-react";
+import { ArrowLeft, Car, Phone, Award, Clock, Pencil } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { formatCurrency } from "@/lib/format";
 
@@ -22,6 +22,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [loggingVisit, setLoggingVisit] = useState(false);
   const [logVisitError, setLogVisitError] = useState("");
   const [logVisitSuccess, setLogVisitSuccess] = useState("");
+  const [showEditModal, setShowEditModal] = useState(false);
   const [ledger, setLedger] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({ totalEarned: 0, totalRedeemed: 0 });
   
@@ -30,7 +31,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   useEffect(() => {
     const fetchCustomer = async () => {
       try {
-        const res = await fetch(`/api/manager/customers/${id}`);
+        const res = await fetch(`/api/staff/customers/${id}`);
         if (res.ok) {
           const data = await res.json();
           setCustomer(data.customer);
@@ -118,7 +119,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       if (res.ok) {
         setLogVisitSuccess("Visit logged successfully!");
         // Refresh history and ledger
-        const fetchRes = await fetch(`/api/manager/customers/${id}`);
+        const fetchRes = await fetch(`/api/staff/customers/${id}`);
         if (fetchRes.ok) {
             const freshData = await fetchRes.json();
             setHistory(freshData.history);
@@ -180,12 +181,20 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </p>
           )}
         </div>
-        <button 
-          onClick={() => setShowLogVisitModal(true)}
-          className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-text-primary text-bg-base hover:bg-opacity-90 transition-colors"
-        >
-          Log Visit
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowEditModal(true)}
+            className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-bg-panel border border-border-hairline text-text-secondary hover:text-text-primary hover:border-accent-copper transition-colors flex items-center gap-2"
+          >
+            <Pencil size={12} /> Edit Profile
+          </button>
+          <button 
+            onClick={() => setShowLogVisitModal(true)}
+            className="px-6 py-2.5 font-bold text-[10px] uppercase tracking-widest bg-text-primary text-bg-base hover:bg-opacity-90 transition-colors"
+          >
+            Log Visit
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -194,6 +203,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-secondary flex items-center gap-1.5 mb-2"><Phone size={12}/> Contact</div>
               <div className="font-mono text-xl text-text-primary">{customer.phone}</div>
+              {customer.email && <div className="text-sm text-text-secondary mt-1">{customer.email}</div>}
             </div>
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-secondary flex items-center gap-1.5 mb-2"><Car size={12}/> Vehicle</div>
@@ -455,6 +465,93 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
       )}
+      {showEditModal && (
+        <EditCustomerModal 
+          customer={customer}
+          onClose={() => setShowEditModal(false)} 
+          onSuccess={(updatedCustomer) => { 
+            setShowEditModal(false); 
+            setCustomer({ ...customer, ...updatedCustomer }); 
+          }} 
+        />
+      )}
     </main>
+  );
+}
+
+function EditCustomerModal({ customer, onClose, onSuccess }: { customer: any, onClose: () => void, onSuccess: (c: any) => void }) {
+  const [formData, setFormData] = useState({ 
+    name: customer.name || "", 
+    phone: customer.phone || "", 
+    email: customer.email || "", 
+    vehicle_number: customer.vehicle_number || "", 
+    vehicle_model: customer.vehicle_model || "" 
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/staff/customers/${customer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSuccess(formData);
+      } else {
+        setError(data.error || "System Error");
+      }
+    } catch (err) {
+      setError("System error during request.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="panel border-l-[3px] border-l-accent-copper p-8 w-full max-w-lg">
+        <h3 className="text-xl font-semibold mb-2 text-text-primary">Edit Profile</h3>
+        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Update customer details</p>
+        
+        {error && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-6 p-3">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-2 gap-5">
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Full Name *</label>
+              <input required type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Phone Number *</label>
+              <input required type="tel" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Email Address *</label>
+              <input required type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Number</label>
+              <input type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors uppercase" />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Model</label>
+              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" placeholder="e.g. Porsche 911 GT3" />
+            </div>
+          </div>
+          
+          <div className="mt-8 flex justify-end gap-4 pt-4 border-t border-border-hairline">
+            <button type="button" onClick={onClose} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
+            <button type="submit" disabled={loading} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
+              {loading ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

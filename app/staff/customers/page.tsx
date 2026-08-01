@@ -97,7 +97,7 @@ export default function CustomersPage() {
 }
 
 function NewCustomerModal({ onClose, onSuccess }: { onClose: () => void, onSuccess: (c: any) => void }) {
-  const [formData, setFormData] = useState({ name: "", phone: "", vehicle_number: "", vehicle_model: "" });
+  const [formData, setFormData] = useState({ name: "", phone: "", email: "", vehicle_number: "", vehicle_model: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -136,6 +136,10 @@ function NewCustomerModal({ onClose, onSuccess }: { onClose: () => void, onSucce
             <div>
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Phone Number *</label>
               <input required type="tel" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Email Address *</label>
+              <input required type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Number</label>

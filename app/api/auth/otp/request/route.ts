@@ -85,16 +85,17 @@ export async function POST(req: NextRequest) {
           port: Number(process.env.SMTP_PORT) || 587,
           auth: {
             user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASSWORD,
+            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
           },
         });
 
-        await transporter.sendMail({
-          from: process.env.EMAIL_FROM || "noreply@magmaautospa.com",
+        const info = await transporter.sendMail({
+          from: process.env.EMAIL_FROM || process.env.SMTP_USER,
           to: user.email as string,
           subject: "Magma Autospa - Admin Password Reset OTP",
           text: `Your Admin Verification Code is: ${emailOtp}`,
         });
+        console.log("[SMTP LIVE TEST] Nodemailer response:", info);
       } else {
         console.log(`[SMTP MOCK] Sent Admin Email OTP ${emailOtp} to ${user.email}`);
       }

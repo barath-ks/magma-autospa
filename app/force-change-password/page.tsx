@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { ShieldAlert } from "lucide-react";
 import PasswordStrengthIndicator from "@/components/PasswordStrengthIndicator";
 
 export default function ForceChangePassword() {
+  const { data: session } = useSession();
+  const role = (session?.user as any)?.role || 'staff';
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -28,7 +30,7 @@ export default function ForceChangePassword() {
     
     const data = await res.json();
     if (res.ok) {
-      await signOut({ callbackUrl: "/login" });
+      await signOut({ callbackUrl: "/" });
     } else {
       setError(data.error || "Failed to update password");
       setLoading(false);

@@ -3,14 +3,21 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session || !session.user || (session.user as any).role !== "manager") {
+  if (!session || !session.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // ENFORCED SECURITY: Scope all queries strictly to the Manager's own branch.
+  const role = (session.user as any).role;
+  if (role !== "manager" && role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const isAdmin = role === "admin";
   const branchId = (session.user as any).branch_id;
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "month";
@@ -26,6 +33,10 @@ export async function GET(request: Request) {
     prevPeriodStart = "'-2 years'";
   }
 
+  const branchFilter = isAdmin ? "" : "branch_id = ? AND ";
+  const tBranchFilter = isAdmin ? "" : "t.branch_id = ? AND ";
+  const args = isAdmin ? [] : [branchId];
+
   try {
     // 1. Transaction Stats (Revenue, Count, Points Awarded)
     const txStatsRes = await db.execute({
@@ -34,8 +45,8 @@ export async function GET(request: Request) {
               COUNT(*) as tx_count,
               COALESCE(SUM(points_awarded), 0) as points_awarded
             FROM transactions 
-            WHERE branch_id = ? AND created_at >= datetime('now', ${dateModifier})`,
-      args: [branchId],
+            WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier})`,
+      args: args,
     });
 
     const stats = txStatsRes.rows[0];
@@ -44,8 +55,8 @@ export async function GET(request: Request) {
     const redeemStatsRes = await db.execute({
       sql: `SELECT COALESCE(SUM(points_redeemed), 0) as points_redeemed 
             FROM redemptions 
-            WHERE branch_id = ? AND created_at >= datetime('now', ${dateModifier})`,
-      args: [branchId],
+            WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier})`,
+      args: args,
     });
     
     const pointsRedeemed = redeemStatsRes.rows[0].points_redeemed;
@@ -54,8 +65,8 @@ export async function GET(request: Request) {
     const customerStatsRes = await db.execute({
       sql: `SELECT COUNT(*) as new_customers 
             FROM customers 
-            WHERE branch_id = ? AND created_at >= datetime('now', ${dateModifier})`,
-      args: [branchId],
+            WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier})`,
+      args: args,
     });
 
     const newCustomers = customerStatsRes.rows[0].new_customers;
@@ -69,21 +80,20 @@ export async function GET(request: Request) {
             FROM transaction_services ts
             JOIN services s ON ts.service_id = s.id
             JOIN transactions t ON ts.transaction_id = t.id
-            WHERE t.branch_id = ? AND t.created_at >= datetime('now', ${dateModifier})
+            WHERE ${tBranchFilter}t.created_at >= datetime('now', ${dateModifier})
             GROUP BY s.id, s.name
             ORDER BY count DESC
             LIMIT 5`,
-      args: [branchId],
+      args: args,
     });
 
     // 4. Previous Period Revenue
     const prevTxStatsRes = await db.execute({
       sql: `SELECT COALESCE(SUM(total_amount), 0) as prev_revenue
             FROM transactions 
-            WHERE branch_id = ? 
-              AND created_at >= datetime('now', ${prevPeriodStart})
+            WHERE ${branchFilter}created_at >= datetime('now', ${prevPeriodStart})
               AND created_at < datetime('now', ${dateModifier})`,
-      args: [branchId],
+      args: args,
     });
     const prevRevenue = prevTxStatsRes.rows[0].prev_revenue;
     let revenueGrowth = null; // null indicates no previous data to compare against
@@ -100,11 +110,11 @@ export async function GET(request: Request) {
         FROM (
           SELECT customer_id, COUNT(*) as visit_count
           FROM transactions
-          WHERE branch_id = ? AND created_at >= datetime('now', ${dateModifier}) AND status = 'finished'
+          WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier}) AND status = 'finished'
           GROUP BY customer_id
         )
       `,
-      args: [branchId],
+      args: args,
     });
     
     const totalUnique = Number(repeatRes.rows[0].total_unique || 0);

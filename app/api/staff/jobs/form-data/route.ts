@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
   try {
     const servicesRes = await db.execute({
-      sql: `SELECT id, name, price, points_earned FROM services WHERE is_active = 1 ORDER BY name ASC`
+      sql: `SELECT id, name, price FROM services WHERE is_active = 1 ORDER BY name ASC`
     });
 
     const staffRes = await db.execute({

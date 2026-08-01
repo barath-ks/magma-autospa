@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { customer_id, service_ids } = body;
+    const { customer_id, service_ids, assigned_to } = body;
 
     // 1. Validate inputs
     if (!customer_id || !Array.isArray(service_ids) || service_ids.length === 0) {
@@ -34,6 +34,22 @@ export async function POST(request: Request) {
 
     if (customerRes.rows[0].branch_id !== staffBranchId) {
       return NextResponse.json({ error: "Forbidden: Customer belongs to a different branch" }, { status: 403 });
+    }
+
+    // 2b. Validate assigned_to branch if provided
+    let finalAssignee = null;
+    if (assigned_to) {
+      const staffRes = await db.execute({
+        sql: `SELECT branch_id FROM users WHERE id = ? AND role IN ('staff', 'manager', 'admin')`,
+        args: [assigned_to]
+      });
+      if (staffRes.rows.length === 0) {
+        return NextResponse.json({ error: "Invalid assignee" }, { status: 400 });
+      }
+      if (staffRes.rows[0].branch_id !== staffBranchId) {
+        return NextResponse.json({ error: "Forbidden: Cannot assign to staff outside your branch" }, { status: 403 });
+      }
+      finalAssignee = assigned_to;
     }
 
     // 3. Fetch all requested services in a single query
@@ -82,8 +98,8 @@ export async function POST(request: Request) {
     // Insert Transaction
     batchStatements.push({
       sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, vehicle_model, vehicle_number, created_at)
-            VALUES (?, ?, ?, NULL, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)`,
-      args: [transactionId, customer_id, staffBranchId, totalAmount, pointsAwarded, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number],
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)`,
+      args: [transactionId, customer_id, staffBranchId, finalAssignee, totalAmount, pointsAwarded, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number],
     });
 
     // Insert Transaction Services

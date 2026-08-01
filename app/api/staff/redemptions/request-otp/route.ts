@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
+
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
@@ -12,7 +19,6 @@ export async function POST(request: Request) {
   }
 
   const staffBranchId = (session.user as any).branch_id;
-  const staffId = (session.user as any).id;
 
   try {
     const { customer_id, offer_id } = await request.json();
@@ -23,7 +29,7 @@ export async function POST(request: Request) {
 
     // 1. Verify customer belongs to this branch
     const customerRes = await db.execute({
-      sql: `SELECT points_balance, branch_id FROM customers WHERE id = ?`,
+      sql: `SELECT points_balance, branch_id, email FROM customers WHERE id = ?`,
       args: [customer_id],
     });
 
@@ -34,6 +40,10 @@ export async function POST(request: Request) {
     const customer = customerRes.rows[0];
     if (customer.branch_id !== staffBranchId) {
       return NextResponse.json({ error: "Unauthorized: Customer belongs to a different branch" }, { status: 403 });
+    }
+
+    if (!customer.email) {
+      return NextResponse.json({ error: "Customer does not have an email address on file. Please update their profile first." }, { status: 400 });
     }
 
     // 2. Verify offer belongs to this branch and is active
@@ -62,35 +72,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Insufficient points balance" }, { status: 400 });
     }
 
-    // 4. Process Redemption in a transaction sequence
-    const redemptionId = uuidv4();
-    const newBalance = currentPoints - requiredPoints;
+    // 4. Generate OTP and store it
+    const otp = generateOTP();
+    const hash = await bcrypt.hash(otp, 10);
+    const otpId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
-    await db.batch([
-      {
-        sql: `UPDATE customers SET points_balance = ? WHERE id = ?`,
-        args: [newBalance, customer_id],
-      },
-      {
-        sql: `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [redemptionId, customer_id, staffBranchId, staffId, offer_id, requiredPoints],
-      },
-      {
-        sql: `INSERT INTO loyalty_points_ledger (id, customer_id, type, points)
-              VALUES (?, ?, 'redeemed', ?)`,
-        args: [uuidv4(), customer_id, requiredPoints],
-      }
-    ], "write");
+    await db.execute({
+      sql: `INSERT INTO customer_otp_codes (id, customer_id, channel, code_hash, purpose, expires_at)
+            VALUES (?, ?, 'email', ?, 'redemption', ?)`,
+      args: [otpId, customer_id, hash, expiresAt],
+    });
+
+    // 5. Send OTP via email
+    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT) || 587,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
+        },
+      });
+
+      const messageText = `Your Magma Autospa redemption verification code is: ${otp}. Share this code with the staff member assisting you to complete your reward redemption. This code expires in 10 minutes.`;
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+        to: customer.email as string,
+        subject: "Magma Autospa - Redemption Verification Code",
+        text: messageText,
+      });
+      console.log(`[SMTP LIVE TEST] Sent OTP ${otp} to ${customer.email}`);
+    } else {
+      console.log(`[SMTP MOCK] Sent OTP ${otp} to ${customer.email}`);
+    }
 
     return NextResponse.json({ 
       success: true, 
-      new_balance: newBalance,
-      message: "Redemption successful" 
+      message: "OTP sent successfully" 
     });
 
   } catch (error) {
-    console.error("Error processing redemption:", error);
+    console.error("Error processing OTP request:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

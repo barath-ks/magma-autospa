@@ -29,9 +29,9 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, description, price, points_earned } = body;
+    const { name, description, price } = body;
 
-    if (!name || price === undefined || points_earned === undefined) {
+    if (!name || price === undefined) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -52,13 +52,13 @@ export async function POST(request: Request) {
     const id = uuidv4();
     await db.execute({
       sql: `INSERT INTO services (id, name, description, price, points_earned, is_active)
-            VALUES (?, ?, ?, ?, ?, 1)`,
-      args: [id, name, description || '', Number(price), Number(points_earned)],
+            VALUES (?, ?, ?, ?, 0, 1)`,
+      args: [id, name, description || '', Number(price)],
     });
 
     return NextResponse.json({ success: true, id });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating service:", error);
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
   }
 }

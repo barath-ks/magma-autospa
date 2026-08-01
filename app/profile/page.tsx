@@ -106,7 +106,7 @@ export default function ProfilePage() {
     if (res.ok) {
       setPwdMsg("Password updated. Signing out...");
       setTimeout(() => {
-        signOut({ callbackUrl: "/login" });
+        signOut({ callbackUrl: "/" });
       }, 2000);
     } else {
       setPwdError(data.error || "Failed to update password");
@@ -131,7 +131,7 @@ export default function ProfilePage() {
       if (data.directUpdate) {
         setRequestMsg(`${requestField === 'login_id' ? 'Login ID' : 'Name'} updated successfully. Signing out to apply changes...`);
         setTimeout(() => {
-          signOut({ callbackUrl: "/login" });
+          signOut({ callbackUrl: "/" });
         }, 2000);
       } else {
         setRequestMsg("Request submitted successfully.");

@@ -8,19 +8,23 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const role = (session.user as any).role;
-  if (!session || !session.user || (role !== "staff" && role !== "manager")) {
+  if (role !== "staff" && role !== "manager" && role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const isAdmin = role === "admin";
   const branchId = (session.user as any).branch_id;
   
   try {
     const { id } = await params;
     
     const customerResult = await db.execute({
-      sql: "SELECT * FROM customers WHERE id = ? AND branch_id = ?",
-      args: [id, branchId],
+      sql: `SELECT * FROM customers WHERE id = ? ${isAdmin ? "" : "AND branch_id = ?"}`,
+      args: isAdmin ? [id] : [id, branchId],
     });
 
     if (customerResult.rows.length === 0) {
@@ -74,6 +78,74 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error fetching customer details:", error);
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const role = (session.user as any).role;
+  if (role !== "staff" && role !== "manager" && role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const isAdmin = role === "admin";
+  const branchId = (session.user as any).branch_id;
+  
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    // Check for protected fields being passed directly
+    const protectedFields = ["points_balance", "branch_id", "id"];
+    const hasProtectedField = protectedFields.some(field => field in body);
+    if (hasProtectedField) {
+      return NextResponse.json(
+        { error: "Attempted to modify protected fields. Points balance, branch ID, and ID cannot be updated through this endpoint." }, 
+        { status: 400 }
+      );
+    }
+
+    // Explicit allowlist extraction
+    const { name, phone, email, vehicle_number, vehicle_model } = body;
+
+    // Validate email is present and non-empty
+    if (!email || email.trim() === "") {
+      return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    }
+
+    if (!name || !phone) {
+      return NextResponse.json({ error: "Name and Phone are required." }, { status: 400 });
+    }
+
+    // Verify ownership for non-admin
+    if (!isAdmin) {
+      const verifyRes = await db.execute({
+        sql: `SELECT id FROM customers WHERE id = ? AND branch_id = ?`,
+        args: [id, branchId]
+      });
+      if (verifyRes.rows.length === 0) {
+        return NextResponse.json({ error: "Forbidden: Customer belongs to another branch or does not exist." }, { status: 403 });
+      }
+    }
+
+    await db.execute({
+      sql: `UPDATE customers SET name = ?, phone = ?, email = ?, vehicle_number = ?, vehicle_model = ? WHERE id = ?`,
+      args: [name, phone, email, vehicle_number || null, vehicle_model || null, id]
+    });
+
+    return NextResponse.json({ success: true, message: "Customer profile updated successfully." });
+  } catch (error: any) {
+    console.error("Error updating customer:", error);
+    if (error.message && error.message.includes("UNIQUE constraint failed")) {
+      return NextResponse.json({ error: "Phone number or email already exists." }, { status: 400 });
+    }
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }
