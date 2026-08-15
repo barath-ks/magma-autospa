@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, description, price } = body;
+    const { name, description, price, points_earned = 10 } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -52,8 +52,8 @@ export async function POST(request: Request) {
     const id = uuidv4();
     await db.execute({
       sql: `INSERT INTO services (id, name, description, price, points_earned, is_active)
-            VALUES (?, ?, ?, ?, 0, 1)`,
-      args: [id, name, description || '', Number(price)],
+            VALUES (?, ?, ?, ?, ?, 1)`,
+      args: [id, name, description || '', Number(price), Number(points_earned)],
     });
 
     return NextResponse.json({ success: true, id });

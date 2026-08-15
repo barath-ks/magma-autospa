@@ -14,7 +14,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   try {
     const body = await request.json();
-    const { name, description, price, is_active } = body;
+    const { name, description, price, is_active, points_earned } = body;
 
     if (price !== undefined && Number(price) <= 0) {
       return NextResponse.json({ error: "Price must be greater than 0" }, { status: 400 });
@@ -27,6 +27,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (name !== undefined) { updates.push("name = ?"); args.push(name); }
     if (description !== undefined) { updates.push("description = ?"); args.push(description); }
     if (price !== undefined) { updates.push("price = ?"); args.push(Number(price)); }
+    if (points_earned !== undefined) { updates.push("points_earned = ?"); args.push(Number(points_earned)); }
     if (is_active !== undefined) { updates.push("is_active = ?"); args.push(is_active ? 1 : 0); }
 
     if (updates.length === 0) {

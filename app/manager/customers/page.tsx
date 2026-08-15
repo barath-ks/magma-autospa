@@ -14,7 +14,7 @@ export default function CustomersPage() {
     const fetchCustomers = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/staff/customers?search=${encodeURIComponent(search)}`);
+        const res = await fetch(`/api/manager/customers?search=${encodeURIComponent(search)}`);
         const data = await res.json();
         if (data.customers) setCustomers(data.customers);
       } catch (e) {
@@ -105,7 +105,7 @@ function NewCustomerModal({ onClose, onSuccess }: { onClose: () => void, onSucce
     e.preventDefault();
     setError("");
     setLoading(true);
-    const res = await fetch("/api/staff/customers", {
+    const res = await fetch("/api/manager/customers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData)

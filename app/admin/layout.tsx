@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Users, Building, Tag, Percent, Contact, LineChart } from "lucide-react";
+import { Users, Building, Tag, Percent, Contact, LineChart, Gift } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -38,6 +38,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <Link href="/admin/offers" className={linkClass("/admin/offers")}>
             <Percent size={16} /> Offers & Combos
+          </Link>
+          <Link href="/admin/rewards" className={linkClass("/admin/rewards")}>
+            <Gift size={16} /> Loyalty Rewards
           </Link>
           <Link href="/admin" className={linkClass("/admin")}>
             <Users size={16} /> Staff & Managers

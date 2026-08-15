@@ -7,13 +7,8 @@ import { Users, LayoutDashboard, Activity, Calendar, ListOrdered, User } from "l
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [badgeCount, setBadgeCount] = useState(0);
-
   useEffect(() => {
-    fetch("/api/notifications")
-      .then(r => r.json())
-      .then(data => setBadgeCount(data.managerScheduleBadge || 0))
-      .catch(e => console.error(e));
+    // Schedule and notification logic removed
   }, [pathname]);
 
   const linkClass = (path: string) => {
@@ -41,15 +36,6 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
           <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary px-4 py-2 mt-4">Management</div>
           <Link href="/manager" className={linkClass("/manager")}>
             <LayoutDashboard size={16} /> Overview
-          </Link>
-          <Link href="/manager/schedule" className={linkClass("/manager/schedule")}>
-            <Calendar size={16} /> 
-            <span className="flex-1">Schedule</span>
-            {badgeCount > 0 && (
-              <span className="bg-accent-oxblood text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                {badgeCount}
-              </span>
-            )}
           </Link>
           <Link href="/manager/analytics" className={linkClass("/manager/analytics")}>
             <Activity size={16} /> Branch Analytics

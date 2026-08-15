@@ -65,7 +65,7 @@ export default function AdminCustomersPage() {
     setSelectedCustomer(customer);
     setDrawerLoading(true);
     try {
-      const res = await fetch(`/api/staff/customers/${customer.id}`);
+      const res = await fetch(`/api/manager/customers/${customer.id}`);
       if (res.ok) {
         const data = await res.json();
         setCustomerDetails(data);

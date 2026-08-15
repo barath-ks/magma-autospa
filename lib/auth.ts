@@ -31,7 +31,7 @@ export const authOptions: NextAuthOptions = {
 
           const user = result.rows[0];
 
-          if (!user) {
+          if (!user || user.role === 'staff') {
             return null;
           }
 
@@ -83,7 +83,10 @@ export const authOptions: NextAuthOptions = {
         }
       }
       
-      // Check custom expiry
+      // Check custom expiry or revoked role
+      if (token.role === 'staff') {
+        return {} as any; // Invalidates session
+      }
       if (token.customExp && Math.floor(Date.now() / 1000) > (token.customExp as number)) {
         return {} as any; // Return empty to expire token
       }

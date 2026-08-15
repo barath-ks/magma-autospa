@@ -46,6 +46,18 @@ CREATE TABLE IF NOT EXISTS customers (
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT
 );
 
+-- Vehicles Table
+CREATE TABLE IF NOT EXISTS vehicles (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  vehicle_number TEXT UNIQUE NOT NULL,
+  vehicle_type TEXT CHECK(vehicle_type IN ('sedan', 'suv', 'hatchback', 'xuv', 'truck', 'van', 'bike', 'other')) NOT NULL,
+  vehicle_model TEXT,
+  is_active BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+);
+
 -- Services Table
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
@@ -78,6 +90,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   total_amount REAL NOT NULL,
   points_awarded INTEGER NOT NULL,
   status TEXT CHECK(status IN ('pending', 'in_progress', 'finished')) DEFAULT 'pending',
+  vehicle_id TEXT,
   vehicle_number TEXT,
   vehicle_model TEXT,
   claimed_at DATETIME,
@@ -85,7 +98,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT,
-  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL
+  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE RESTRICT
 );
 
 -- Transaction Items (Services) Table
@@ -193,5 +207,38 @@ CREATE TABLE IF NOT EXISTS loyalty_points_ledger (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
   FOREIGN KEY (related_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
+);
+
+-- Service Offers Table
+CREATE TABLE IF NOT EXISTS service_offers (
+  id TEXT PRIMARY KEY,
+  service_id TEXT NOT NULL,
+  offer_price REAL NOT NULL,
+  branch_id TEXT,
+  is_active BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+);
+
+-- Combos Table
+CREATE TABLE IF NOT EXISTS combos (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  bundle_price REAL NOT NULL,
+  branch_id TEXT,
+  is_active BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+);
+
+-- Combo Services Join Table
+CREATE TABLE IF NOT EXISTS combo_services (
+  combo_id TEXT NOT NULL,
+  service_id TEXT NOT NULL,
+  PRIMARY KEY (combo_id, service_id),
+  FOREIGN KEY (combo_id) REFERENCES combos(id) ON DELETE CASCADE,
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
 );
 `;
