@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS customers (
   branch_id TEXT NOT NULL,
   vehicle_number TEXT,
   vehicle_model TEXT,
+  email TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT
 );
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS services (
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
   price REAL NOT NULL,
-  points_earned INTEGER NOT NULL,
+  points_earned INTEGER NOT NULL DEFAULT 10,
   is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -123,23 +124,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Shift Requests Table
-CREATE TABLE IF NOT EXISTS shift_requests (
-  id TEXT PRIMARY KEY,
-  staff_id TEXT NOT NULL,
-  branch_id TEXT NOT NULL,
-  requested_date TEXT NOT NULL,
-  start_time TEXT NOT NULL,
-  end_time TEXT NOT NULL,
-  status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
-  staff_note TEXT,
-  manager_note TEXT,
-  staff_viewed BOOLEAN DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  reviewed_at DATETIME,
-  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
-);
+
 
 -- Profile Change Requests Table
 CREATE TABLE IF NOT EXISTS profile_change_requests (
@@ -168,6 +153,19 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   used BOOLEAN DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Customer OTP Codes Table
+CREATE TABLE IF NOT EXISTS customer_otp_codes (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  channel TEXT CHECK(channel IN ('phone', 'email')),
+  code_hash TEXT NOT NULL,
+  purpose TEXT DEFAULT 'redemption',
+  expires_at DATETIME NOT NULL,
+  used BOOLEAN DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
 
 -- Redemptions Table

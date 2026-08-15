@@ -1,5 +1,4 @@
 "use client";
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -7,9 +6,6 @@ import { Users, LayoutDashboard, Activity, Calendar, ListOrdered, User } from "l
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  useEffect(() => {
-    // Schedule and notification logic removed
-  }, [pathname]);
 
   const linkClass = (path: string) => {
     const isActive = pathname === path;
