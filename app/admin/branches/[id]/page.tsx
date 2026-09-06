@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, KeyRound, AlertCircle, ShieldAlert } from "lucide-react";
+import { Plus, KeyRound, AlertCircle, ShieldAlert, Eye, EyeOff, Copy, Check, RefreshCw, Building2, Lock, ShieldCheck } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { useParams } from "next/navigation";
 import { formatCurrency } from "@/lib/format";
@@ -29,11 +29,63 @@ export default function BranchDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [createdUser, setCreatedUser] = useState<any>(null);
+  const [showTempPassword, setShowTempPassword] = useState(false);
+
+  // Branch Credentials & Password Reset state
+  const [showBranchPassword, setShowBranchPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetPasswordVal, setResetPasswordVal] = useState("");
+  const [resetMustChange, setResetMustChange] = useState(true);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState("");
 
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
+
+  const copyToClipboard = (text: string, field: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const generateRandomTempPassword = () => {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    setResetPasswordVal(`Magma@${randomDigits}`);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordVal.trim()) return;
+    setResetLoading(true);
+    setResetError("");
+
+    try {
+      const res = await fetch(`/api/admin/branches/${branchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          password: resetPasswordVal.trim(),
+          must_change_password: resetMustChange,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResetError(data.error || "Failed to reset branch password");
+      } else {
+        setShowResetModal(false);
+        setResetPasswordVal("");
+        fetchBranchData();
+      }
+    } catch (err) {
+      setResetError("Network error");
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const fetchBranchData = async () => {
     try {
@@ -229,6 +281,108 @@ export default function BranchDetailPage() {
       <div className="w-full max-w-5xl mx-auto">
         {activeTab === "details" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {/* Branch Floor Terminal Credentials Card */}
+            <div className="panel p-6 sm:p-8 mb-8 border-l-[3px] border-l-[#B87333]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-border-hairline">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <KeyRound size={18} className="text-[#B87333]" />
+                    <h2 className="text-lg font-semibold text-text-primary">Branch Floor Credentials</h2>
+                    {branch?.must_change_password ? (
+                      <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 bg-amber-950/60 border border-amber-500/40 text-amber-300 rounded-sm">
+                        First Login Pending
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 rounded-sm">
+                        Secured & Active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    Active login credentials for floor operators to access the dedicated Branch Terminal (<code className="text-[#B87333]">/branch/login</code>).
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetPasswordVal("");
+                    setResetError("");
+                    setShowResetModal(true);
+                  }}
+                  className="self-start sm:self-auto px-4 py-2 bg-bg-panel-elevated border border-border-hairline hover:border-[#B87333] text-text-primary text-xs font-mono uppercase tracking-wider flex items-center gap-2 transition-colors"
+                >
+                  <RefreshCw size={13} className="text-[#B87333]" />
+                  <span>Reset Floor Password</span>
+                </button>
+              </div>
+
+              {/* Grid with Email, Branch Code, Active Password */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Email */}
+                <div className="bg-bg-base border border-border-hairline p-4">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-text-secondary mb-1">Floor Login Email</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-sm text-text-primary truncate" title={branch?.email || branch?.code}>
+                      {branch?.email || `${branch?.code?.toLowerCase()}@magma-autospa.com`}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(branch?.email || `${branch?.code?.toLowerCase()}@magma-autospa.com`, 'branch-email')}
+                      className="text-text-secondary hover:text-text-primary p-1 transition-colors"
+                      title="Copy email"
+                    >
+                      {copiedField === 'branch-email' ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branch Code */}
+                <div className="bg-bg-base border border-border-hairline p-4">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-text-secondary mb-1">Branch Code / Slug</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-sm text-[#B87333] font-bold">
+                      {branch?.branch_code || branch?.code}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(branch?.branch_code || branch?.code, 'branch-code')}
+                      className="text-text-secondary hover:text-text-primary p-1 transition-colors"
+                      title="Copy code"
+                    >
+                      {copiedField === 'branch-code' ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Password */}
+                <div className="bg-bg-base border border-border-hairline p-4">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-text-secondary mb-1">Active Password</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-sm text-amber-400 tracking-wider">
+                      {showBranchPassword ? (branch?.display_password || "••••••••") : "••••••••"}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setShowBranchPassword(!showBranchPassword)}
+                        className="text-text-secondary hover:text-text-primary p-1 transition-colors"
+                        title={showBranchPassword ? "Hide password" : "Show password"}
+                      >
+                        {showBranchPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      {branch?.display_password && (
+                        <button
+                          onClick={() => copyToClipboard(branch.display_password, 'branch-pwd')}
+                          className="text-text-secondary hover:text-text-primary p-1 transition-colors"
+                          title="Copy password"
+                        >
+                          {copiedField === 'branch-pwd' ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {showAddForm && (
               <div className="panel p-8 mb-8 border-l-[3px] border-l-accent-oxblood">
                 <h2 className="text-lg font-semibold text-text-primary mb-6">Create New Account in {branch?.name}</h2>
@@ -252,8 +406,8 @@ export default function BranchDetailPage() {
                       <input type="text" value={phone} onChange={e=>setPhone(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
                     </div>
                     <div>
-                      <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Email Address (Optional)</label>
-                      <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
+                      <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Email Address *</label>
+                      <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="e.g. staff@magma-autospa.com" className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
                     </div>
                   </div>
                   <div className="flex justify-end gap-4 pt-4 border-t border-border-hairline mt-4">
@@ -345,7 +499,19 @@ export default function BranchDetailPage() {
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary mb-1">Temporary Password</div>
-                <div className="text-xl font-mono text-accent-oxblood tracking-widest">{createdUser.temp_password}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-xl font-mono text-accent-oxblood tracking-widest">
+                    {showTempPassword ? createdUser.temp_password : "••••••••"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTempPassword(!showTempPassword)}
+                    className="text-text-secondary hover:text-text-primary transition-colors focus:outline-none p-1"
+                    aria-label={showTempPassword ? "Hide password" : "Show password"}
+                  >
+                    {showTempPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -383,6 +549,77 @@ export default function BranchDetailPage() {
                 </button>
                 <button type="submit" disabled={otpLoading || otpCode.length < 6} className="flex-1 py-3 bg-accent-oxblood text-white text-xs uppercase tracking-widest font-bold hover:opacity-90 disabled:opacity-50 transition-opacity">
                   {otpLoading ? "Verifying..." : "Confirm Delete"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showResetModal && (
+        <div className="fixed inset-0 bg-bg-base/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="panel p-6 sm:p-8 w-full max-w-md border-l-[3px] border-l-[#B87333]">
+            <h2 className="text-xl font-semibold mb-1 text-text-primary">Reset Floor Terminal Password</h2>
+            <p className="text-xs text-text-secondary mb-6 leading-relaxed">
+              Set a new temporary password for <strong className="text-white">{branch?.name}</strong>. The branch operator will be prompted to change it on their next login.
+            </p>
+
+            {resetError && (
+              <div className="text-[#ff6b6b] bg-[#3a1616] p-3 text-xs font-mono mb-4">
+                {resetError}
+              </div>
+            )}
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary">
+                    New Temporary Password *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateRandomTempPassword}
+                    className="text-[10px] font-mono text-[#B87333] hover:underline flex items-center gap-1"
+                  >
+                    <RefreshCw size={10} /> Auto-Generate
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={resetPasswordVal}
+                  onChange={(e) => setResetPasswordVal(e.target.value)}
+                  className="w-full bg-bg-base border border-border-hairline p-3 font-mono text-sm text-amber-400 focus:border-[#B87333] focus:outline-none"
+                  placeholder="e.g. Magma@7821"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="reset_must_change"
+                  checked={resetMustChange}
+                  onChange={(e) => setResetMustChange(e.target.checked)}
+                />
+                <label htmlFor="reset_must_change" className="text-xs text-text-secondary">
+                  Require password change on next floor login
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-border-hairline mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(false)}
+                  className="flex-1 py-2.5 bg-bg-panel text-text-secondary text-xs uppercase tracking-widest font-bold hover:text-text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetLoading || !resetPasswordVal.trim()}
+                  className="flex-1 py-2.5 bg-[#B87333] text-white text-xs uppercase tracking-widest font-bold hover:bg-[#a66426] disabled:opacity-50 transition-colors"
+                >
+                  {resetLoading ? "Updating..." : "Save Password"}
                 </button>
               </div>
             </form>

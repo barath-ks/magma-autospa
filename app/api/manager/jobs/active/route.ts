@@ -18,6 +18,8 @@ export async function GET(request: Request) {
       sql: `SELECT 
               t.id, 
               t.status, 
+              t.total_amount,
+              t.payment_method,
               t.created_at,
               t.claimed_at,
               t.finished_at,
@@ -59,11 +61,16 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, status } = body;
+    const { id, status, payment_method } = body;
 
     if (!id || !status) {
       return NextResponse.json({ error: "Missing id or status" }, { status: 400 });
     }
+
+    const validPaymentMethods = ["cash", "upi", "card"];
+    const finalPaymentMethod = payment_method && validPaymentMethods.includes(payment_method)
+      ? payment_method
+      : "cash";
 
     // 1. Fetch transaction to verify branch, current assignment, and points data
     const result = await db.execute({
@@ -82,18 +89,16 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Forbidden: Cross-branch access denied" }, { status: 403 });
     }
 
-    // Security Check 3: Ownership strict enforcement
-    const isUnclaimed = transaction.staff_id === null;
-    const isOwner = transaction.staff_id === userId;
-    const isManagerOrAdmin = userRole === 'manager' || userRole === 'admin';
-
-    if (!isUnclaimed && !isOwner && !isManagerOrAdmin) {
-      return NextResponse.json({ error: "Forbidden: Job is claimed by another staff member" }, { status: 403 });
+    // Security Check: Verify user belongs to branch, staff, manager, or admin role
+    if (userRole !== 'branch' && userRole !== 'staff' && userRole !== 'manager' && userRole !== 'admin') {
+      return NextResponse.json({ error: "Forbidden: Unauthorized role" }, { status: 403 });
     }
 
-    // Determine staff_id to set. Implicit claim on first touch.
-    const newStaffId = isUnclaimed ? userId : transaction.staff_id;
-    const isClaimingNow = (isUnclaimed && newStaffId === userId) || (transaction.status === 'pending' && status === 'in_progress');
+    // Determine staff_id to set: auto-assign to current user if staff/manager and unclaimed, or preserve existing for branch
+    const isBranchRole = userRole === 'branch';
+    const isUnclaimed = transaction.staff_id === null;
+    const newStaffId = isBranchRole ? transaction.staff_id : (isUnclaimed ? userId : transaction.staff_id);
+    const isClaimingNow = (!isBranchRole && isUnclaimed && newStaffId === userId) || (transaction.status === 'pending' && status === 'in_progress');
     const isFinishingNow = status === 'finished' && transaction.status !== 'finished';
 
     // Execute update
@@ -106,7 +111,8 @@ export async function PATCH(request: Request) {
       sql += `, claimed_at = CURRENT_TIMESTAMP`;
     }
     if (isFinishingNow) {
-      sql += `, finished_at = CURRENT_TIMESTAMP`;
+      sql += `, finished_at = CURRENT_TIMESTAMP, payment_method = ?`;
+      args.push(finalPaymentMethod);
     }
 
     sql += ` WHERE id = ?`;

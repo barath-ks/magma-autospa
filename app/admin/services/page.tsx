@@ -1,203 +1,403 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, CheckCircle2, XCircle } from "lucide-react";
-import Breadcrumbs from "@/components/Breadcrumbs";
-import { formatCurrency } from "@/lib/format";
 
-export default function ServicesPage() {
-  const [services, setServices] = useState<any[]>([]);
+import React, { useEffect, useState } from "react";
+import { Plus, Edit2, Trash2, MapPin, Tag, Clock, Globe, ShieldCheck, X } from "lucide-react";
+
+interface Branch {
+  id: string;
+  name: string;
+}
+
+interface Service {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  points_earned: number;
+  duration_minutes: number | null;
+  category: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  is_active: number;
+}
+
+export default function AdminServicesPage() {
+  const [services, setServices] = useState<Service[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Modal states
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingService, setEditingService] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
-  
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [pointsEarned, setPointsEarned] = useState("10");
-  const [isActive, setIsActive] = useState(true);
+  // Form states
+  const [formData, setFormData] = useState({ 
+    id: "", 
+    name: "", 
+    description: "", 
+    price: 0, 
+    points_earned: 10,
+    duration_minutes: "", 
+    category: "", 
+    branch_id: "", 
+    is_active: true 
+  });
+  const [formError, setFormError] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
-    fetchServices();
+    fetchData();
   }, []);
 
-  const fetchServices = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/services");
-      const data = await res.json();
-      if (data.services) setServices(data.services);
+      const [resServices, resBranches] = await Promise.all([
+        fetch("/api/admin/services").then((res) => res.json()),
+        fetch("/api/admin/branches").then((res) => res.json()),
+      ]);
+
+      if (resServices.services) setServices(resServices.services);
+      if (resBranches.branches) setBranches(resBranches.branches);
     } catch (e) {
-      console.error(e);
+      console.error("Error fetching data", e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const openAddModal = () => {
-    setEditingService(null);
-    setName("");
-    setDescription("");
-    setPrice("");
-    setPointsEarned("10");
-    setIsActive(true);
-    setModalOpen(true);
+  const resetForm = () => {
+    setFormData({ 
+      id: "", 
+      name: "", 
+      description: "", 
+      price: 0, 
+      points_earned: 10,
+      duration_minutes: "", 
+      category: "", 
+      branch_id: "", 
+      is_active: true 
+    });
+    setFormError("");
   };
 
-  const openEditModal = (service: any) => {
-    setEditingService(service);
-    setName(service.name);
-    setDescription(service.description);
-    setPrice(service.price.toString());
-    setPointsEarned(service.points_earned?.toString() || "0");
-    setIsActive(Boolean(service.is_active));
-    setModalOpen(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    
-    const payload = { 
-      name, 
-      description, 
-      price: Number(price), 
-      points_earned: Number(pointsEarned),
-      is_active: isActive 
-    };
+    setFormError("");
+    setFormLoading(true);
 
     try {
-      const url = editingService 
-        ? `/api/admin/services/${editingService.id}`
-        : "/api/admin/services";
-      
-      const res = await fetch(url, {
-        method: editingService ? "PATCH" : "POST",
+      const res = await fetch("/api/admin/services", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          price: Number(formData.price),
+          points_earned: Number(formData.points_earned),
+          duration_minutes: formData.duration_minutes ? Number(formData.duration_minutes) : undefined,
+          category: formData.category || undefined,
+          branch_id: formData.branch_id || null,
+        }),
       });
-      
-      if (res.ok) {
-        setModalOpen(false);
-        fetchServices();
+      const data = await res.json();
+      if (!res.ok) {
+        setFormError(data.error || "Failed to create service");
       } else {
-        const data = await res.json();
-        alert(data.error);
+        setIsAddOpen(false);
+        resetForm();
+        fetchData(); 
       }
-    } catch (e) {
-      console.error(e);
+    } catch (err: any) {
+      setFormError("Network error");
+    } finally {
+      setFormLoading(false);
     }
-    setSaving(false);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+    setFormLoading(true);
+
+    try {
+      const res = await fetch(`/api/admin/services/${formData.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          price: Number(formData.price),
+          points_earned: Number(formData.points_earned),
+          duration_minutes: formData.duration_minutes ? Number(formData.duration_minutes) : null,
+          category: formData.category || null,
+          branch_id: formData.branch_id || null,
+          is_active: formData.is_active,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFormError(data.error || "Failed to update service");
+      } else {
+        setIsEditOpen(false);
+        resetForm();
+        fetchData(); 
+      }
+    } catch (err: any) {
+      setFormError("Network error");
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const openEdit = (svc: Service) => {
+    setFormData({
+      id: svc.id,
+      name: svc.name,
+      description: svc.description || "",
+      price: svc.price,
+      points_earned: svc.points_earned,
+      duration_minutes: svc.duration_minutes ? svc.duration_minutes.toString() : "",
+      category: svc.category || "",
+      branch_id: svc.branch_id || "",
+      is_active: svc.is_active === 1,
+    });
+    setIsEditOpen(true);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to deactivate this service?")) return;
-    
     try {
       const res = await fetch(`/api/admin/services/${id}`, { method: "DELETE" });
-      if (res.ok) fetchServices();
+      if (res.ok) fetchData();
     } catch (e) {
       console.error(e);
     }
   };
 
   return (
-    <main className="flex-1 p-8 lg:p-12 overflow-auto">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <Breadcrumbs items={[{ label: "System", href: "/admin" }, { label: "Services & Pricing" }]} accentClass="hover:text-accent-oxblood" />
-          <h1 className="text-3xl font-semibold text-text-primary mt-2">Services & Pricing</h1>
-          <p className="text-text-secondary mt-1 text-sm uppercase tracking-wider">Manage global services and base pricing for all branches.</p>
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-8 font-inter">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-8 border-l-[3px] border-[#800020] pl-4">
+          <div>
+            <h1 className="text-3xl font-fraunces font-semibold tracking-tight">Services & Pricing</h1>
+            <p className="text-gray-400 mt-1">Manage service catalog, duration, pricing, and branch availability.</p>
+          </div>
+          <button
+            onClick={() => { resetForm(); setIsAddOpen(true); }}
+            className="flex items-center gap-2 bg-[#121212] border border-white/10 hover:border-white/30 text-white px-4 py-2 text-sm transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Service
+          </button>
         </div>
-        <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-accent-oxblood text-white text-xs font-bold uppercase tracking-widest hover:bg-opacity-90 transition-colors">
-          <Plus size={14} /> Add Service
-        </button>
+
+        {loading ? (
+          <div className="text-center py-20 text-gray-500">Loading services...</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.map((s) => (
+              <div key={s.id} className={`bg-[#121212] border border-white/10 p-5 flex flex-col relative ${s.is_active ? '' : 'opacity-60 grayscale'}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-fraunces text-xl font-medium">{s.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      {s.branch_id ? (
+                        <span className="flex items-center gap-1 font-mono text-xs text-[#800020] bg-[#800020]/10 px-2 py-0.5 rounded-sm">
+                          <MapPin className="w-3 h-3" /> {s.branch_name}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 font-mono text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-sm">
+                          <Globe className="w-3 h-3" /> Global
+                        </span>
+                      )}
+                      
+                      {!s.is_active && (
+                        <span className="text-[10px] uppercase tracking-wider text-red-400 border border-red-400/30 px-1.5 py-0.5 rounded-sm">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-white transition-colors" title="Edit Service">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {s.is_active && (
+                      <button onClick={() => handleDelete(s.id)} className="text-gray-500 hover:text-red-400 transition-colors" title="Deactivate Service">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 flex-grow text-sm text-gray-300">
+                  <p className="line-clamp-2 text-gray-400 text-xs mb-2">{s.description || "No description provided."}</p>
+                  
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="flex items-center gap-2 bg-[#0a0a0a] border border-white/5 p-2">
+                      <Tag className="w-4 h-4 text-gray-500 shrink-0" />
+                      <span className="font-mono text-green-400">${s.price.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-[#0a0a0a] border border-white/5 p-2">
+                      <Clock className="w-4 h-4 text-gray-500 shrink-0" />
+                      <span className="font-mono">{s.duration_minutes ? `${s.duration_minutes}m` : "--"}</span>
+                    </div>
+                  </div>
+                  
+                  {s.category && (
+                    <div className="pt-2 flex items-center text-xs text-gray-500 uppercase tracking-wider">
+                      Category: <span className="ml-2 font-semibold text-gray-300">{s.category}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <p className="text-sm font-mono text-text-secondary uppercase tracking-widest">Loading catalog...</p>
-      ) : (
-        <div className="panel overflow-hidden border-l-[3px] border-l-accent-oxblood">
-          <table className="w-full text-left">
-            <thead className="bg-bg-panel-elevated border-b border-border-hairline text-text-secondary uppercase text-[10px] tracking-[0.2em] font-medium">
-              <tr>
-                <th className="p-4">Name & Description</th>
-                <th className="p-4">Price</th>
-                <th className="p-4">Points</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-hairline bg-bg-panel">
-              {services.map(s => (
-                <tr key={s.id} className="hover:bg-bg-panel-elevated transition-colors">
-                  <td className="p-4">
-                    <div className="text-sm font-medium text-text-primary">{s.name}</div>
-                    <div className="text-[10px] text-text-secondary mt-1 uppercase tracking-wider">{s.description || "No description"}</div>
-                  </td>
-                  <td className="p-4 font-mono text-sm text-text-primary">{formatCurrency(s.price)}</td>
-                  <td className="p-4 font-mono text-sm text-text-primary">{s.points_earned}</td>
-                  <td className="p-4">
-                    {s.is_active ? 
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-[#4ade80]"><CheckCircle2 size={12}/> Active</span> : 
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-text-secondary"><XCircle size={12}/> Inactive</span>
-                    }
-                  </td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => openEditModal(s)} className="p-2 text-text-secondary hover:text-accent-oxblood transition-colors inline-block"><Edit2 size={14}/></button>
-                    {s.is_active ? (
-                      <button onClick={() => handleDelete(s.id)} className="p-2 text-text-secondary hover:text-accent-oxblood transition-colors inline-block ml-2"><Trash2 size={14}/></button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {services.length === 0 && (
-                <tr><td colSpan={5} className="p-8 text-center text-text-secondary uppercase tracking-widest text-sm">No services found.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* Add Modal */}
+      {isAddOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-white/10 p-6 w-full max-w-lg">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-fraunces">Create New Service</h2>
+              <button onClick={() => setIsAddOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            
+            {formError && <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-sm p-3 mb-4 rounded-sm">{formError}</div>}
 
-      {modalOpen && (
-        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="panel border-l-[3px] border-l-accent-oxblood p-8 w-full max-w-md">
-            <h3 className="text-xl font-semibold mb-6 text-text-primary">{editingService ? "Edit Service" : "Add Service"}</h3>
-            <form onSubmit={handleSave} className="space-y-5">
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Service Name *</label>
-                <input required type="text" value={name} onChange={e=>setName(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Description</label>
-                <textarea value={description} onChange={e=>setDescription(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" rows={2} />
-              </div>
+            <form onSubmit={handleAddSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Price (₹) *</label>
-                  <input required type="number" step="0.01" min="0.01" value={price} onChange={e=>setPrice(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Service Name</label>
+                  <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" />
                 </div>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm text-[#800020] font-medium mb-1">Branch Scope</label>
+                  <select 
+                    value={formData.branch_id} 
+                    onChange={e => setFormData({ ...formData, branch_id: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]"
+                  >
+                    <option value="">Global (All Branches)</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Loyalty Points Earned *</label>
-                  <input required type="number" min="0" value={pointsEarned} onChange={e=>setPointsEarned(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
+                  <label className="block text-sm text-gray-400 mb-1">Base Price ($)</label>
+                  <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Duration (Minutes)</label>
+                  <input type="number" min="0" value={formData.duration_minutes} onChange={e => setFormData({ ...formData, duration_minutes: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" placeholder="e.g. 45" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Category</label>
+                  <input value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" placeholder="e.g. SUV, Detailing" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Points Earned</label>
+                  <input required type="number" min="0" value={formData.points_earned} onChange={e => setFormData({ ...formData, points_earned: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <textarea rows={3} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020] resize-none" />
                 </div>
               </div>
-              {editingService && (
-                <div className="flex items-center pt-2">
-                  <input type="checkbox" id="isActive" checked={isActive} onChange={e=>setIsActive(e.target.checked)} className="h-4 w-4 bg-bg-base border-border-hairline-strong accent-accent-oxblood focus:ring-0 cursor-pointer" />
-                  <label htmlFor="isActive" className="ml-2 text-xs font-medium text-text-secondary cursor-pointer">Service is active</label>
-                </div>
-              )}
-              <div className="flex justify-end gap-4 pt-4 border-t border-border-hairline">
-                <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
-                <button type="submit" disabled={saving} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-oxblood text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
-                  {saving ? "Saving..." : "Save Service"}
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsAddOpen(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={formLoading} className="px-4 py-2 text-sm bg-white text-black hover:bg-gray-200 disabled:opacity-50">
+                  {formLoading ? "Creating..." : "Create Service"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </main>
+
+      {/* Edit Modal */}
+      {isEditOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-white/10 p-6 w-full max-w-lg">
+            <div className="flex justify-between items-center mb-6 border-l-[3px] border-[#800020] pl-3">
+              <h2 className="text-xl font-fraunces">Edit Service</h2>
+              <button onClick={() => setIsEditOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            
+            {formError && <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-sm p-3 mb-4 rounded-sm">{formError}</div>}
+
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Service Name</label>
+                  <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" />
+                </div>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm text-[#800020] font-medium mb-1">Branch Scope</label>
+                  <select 
+                    value={formData.branch_id} 
+                    onChange={e => setFormData({ ...formData, branch_id: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]"
+                  >
+                    <option value="">Global (All Branches)</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Base Price ($)</label>
+                  <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Duration (Minutes)</label>
+                  <input type="number" min="0" value={formData.duration_minutes} onChange={e => setFormData({ ...formData, duration_minutes: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" placeholder="e.g. 45" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Category</label>
+                  <input value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" placeholder="e.g. SUV, Detailing" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Points Earned</label>
+                  <input required type="number" min="0" value={formData.points_earned} onChange={e => setFormData({ ...formData, points_earned: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <textarea rows={3} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020] resize-none" />
+                </div>
+              </div>
+              
+              <div className="pt-2 flex items-center gap-2">
+                <input type="checkbox" id="is_active" checked={formData.is_active} onChange={e => setFormData({ ...formData, is_active: e.target.checked })} />
+                <label htmlFor="is_active" className="text-sm text-gray-300">Service is Active</label>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                <button type="button" onClick={() => setIsEditOpen(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={formLoading} className="px-4 py-2 text-sm bg-white text-black hover:bg-gray-200 disabled:opacity-50">
+                  {formLoading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

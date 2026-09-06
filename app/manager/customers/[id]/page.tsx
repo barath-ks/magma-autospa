@@ -2,9 +2,10 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Car, Phone, Award, Clock, Pencil } from "lucide-react";
+import { ArrowLeft, Car, Phone, Award, Clock, Pencil, Mail, Banknote, Smartphone, CreditCard } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { formatCurrency } from "@/lib/format";
+import { PaymentBadge } from "@/components/PaymentBadge";
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -20,10 +21,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState("");
   const [redeemSuccess, setRedeemSuccess] = useState("");
+  const [redeemCooldown, setRedeemCooldown] = useState(0);
   const [services, setServices] = useState<any[]>([]);
   const [showLogVisitModal, setShowLogVisitModal] = useState(false);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
+  const [logVisitPaymentMethod, setLogVisitPaymentMethod] = useState<"cash" | "upi" | "card">("cash");
   const [loggingVisit, setLoggingVisit] = useState(false);
   const [logVisitError, setLogVisitError] = useState("");
   const [logVisitSuccess, setLogVisitSuccess] = useState("");
@@ -34,6 +37,19 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [showEditVehicleModal, setShowEditVehicleModal] = useState<any>(null);
   
   const { id } = use(params);
+
+  const fetchOffers = async (customerBranchId?: string) => {
+    try {
+      const query = customerBranchId ? `?branch_id=${encodeURIComponent(customerBranchId)}` : "";
+      const res = await fetch(`/api/manager/offers${query}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOffers(data.offers || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
     const fetchCustomer = async () => {
@@ -46,24 +62,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           setHistory(data.history);
           setLedger(data.ledger || []);
           setStats(data.stats || { totalEarned: 0, totalRedeemed: 0 });
+          if (data.customer?.branch_id) {
+            fetchOffers(data.customer.branch_id);
+          }
         } else {
-          router.push("/staff/customers");
+          router.push("/manager/customers");
         }
       } catch (e) {
         console.error(e);
       }
       setLoading(false);
-    };
-    const fetchOffers = async () => {
-      try {
-        const res = await fetch(`/api/manager/offers`);
-        if (res.ok) {
-          const data = await res.json();
-          setOffers(data.offers);
-        }
-      } catch (e) {
-        console.error(e);
-      }
     };
     const fetchServices = async () => {
       try {
@@ -82,9 +90,22 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       fetchOffers();
       fetchServices();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
 
+  useEffect(() => {
+    if (redeemCooldown > 0) {
+      const timer = setTimeout(() => setRedeemCooldown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [redeemCooldown]);
+
   const handleRequestOTP = async (offerId: string) => {
+    if (!customer?.email || !customer.email.trim()) {
+      setRedeemError("This customer has no registered email address on file. Please edit their profile to add an email address before claiming rewards.");
+      return;
+    }
+
     setRedeemError("");
     setRedeemSuccess("");
     setRedeeming(true);
@@ -99,8 +120,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       const data = await res.json();
       
       if (res.ok) {
-        setRedeemSuccess("Verification code sent to customer's email.");
+        setRedeemSuccess(data.message || `Verification code sent to customer's registered email (${customer.email}).`);
         setRedeemStep(2);
+        setRedeemCooldown(60);
       } else {
         setRedeemError(data.error || "Failed to request OTP.");
       }
@@ -163,7 +185,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       const res = await fetch("/api/manager/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: id, service_ids: selectedServiceIds, vehicle_id: selectedVehicleId })
+        body: JSON.stringify({ 
+          customer_id: id, 
+          service_ids: selectedServiceIds, 
+          vehicle_id: selectedVehicleId,
+          payment_method: logVisitPaymentMethod
+        })
       });
       const data = await res.json();
       
@@ -220,7 +247,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="flex-1 p-8 lg:p-12 overflow-auto">
-      <Breadcrumbs items={[{ label: "Overview", href: "/staff" }, { label: "Customers", href: "/staff/customers" }, { label: customer.name }]} accentClass="hover:text-accent-gold" />
+      <Breadcrumbs items={[{ label: "Overview", href: "/manager" }, { label: "Customers", href: "/manager/customers" }, { label: customer.name }]} accentClass="hover:text-accent-gold" />
 
       <div className="flex justify-between items-start mb-10">
         <div>
@@ -268,8 +295,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   vehicles.map(v => (
                     <div key={v.id} className="flex justify-between items-start group">
                       <div>
-                        <div className="font-mono text-sm text-text-primary uppercase">{v.vehicle_number}</div>
-                        <div className="text-xs text-text-secondary mt-0.5 capitalize">{v.vehicle_type} {v.vehicle_model ? `- ${v.vehicle_model}` : ''}</div>
+                        <div className="font-mono text-sm text-text-primary uppercase font-bold">{v.vehicle_number}</div>
+                        <div className="text-xs text-text-secondary mt-0.5 capitalize">
+                          {v.vehicle_make ? <span className="text-text-primary font-medium">{v.vehicle_make} </span> : null}
+                          {v.vehicle_model || v.vehicle_type}
+                          <span className="opacity-60 text-[10px] uppercase font-mono ml-1.5">({v.vehicle_type})</span>
+                        </div>
                       </div>
                       <button onClick={() => setShowEditVehicleModal(v)} className="text-text-secondary hover:text-accent-gold opacity-0 group-hover:opacity-100 transition-opacity">
                         <Pencil size={12} />
@@ -291,8 +322,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             <div>Redeemed: <span className="text-text-primary">{stats.totalRedeemed}</span></div>
           </div>
           <button 
-            onClick={() => setShowRedeemModal(true)}
-            className="mt-6 w-full py-2.5 font-bold text-[10px] uppercase tracking-widest bg-accent-gold text-white hover:bg-opacity-90 transition-colors"
+            onClick={() => {
+              if (customer?.branch_id) {
+                fetchOffers(customer.branch_id);
+              }
+              setShowRedeemModal(true);
+            }}
+            className="mt-6 w-full py-2.5 font-bold text-[10px] uppercase tracking-widest bg-accent-gold text-white hover:bg-opacity-90 transition-colors cursor-pointer"
           >
             Redeem Reward
           </button>
@@ -329,7 +365,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         {h.services.map((s:any) => s.name).join(", ")}
                       </div>
                       
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-4 p-4 bg-bg-panel-elevated border border-border-hairline rounded-sm">
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mt-4 p-4 bg-bg-panel-elevated border border-border-hairline rounded-sm items-center">
                         <div>
                           <div className="text-[9px] uppercase tracking-widest text-text-secondary mb-1">Ticket ID</div>
                           <div className="font-mono text-xs text-text-primary">#{h.id.split('-')[0].toUpperCase()}</div>
@@ -347,8 +383,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           <div className="font-mono text-xs text-text-primary">{h.staff_name || 'Unassigned'}</div>
                         </div>
                         <div>
+                          <div className="text-[9px] uppercase tracking-widest text-text-secondary mb-1">Payment</div>
+                          <div>
+                            <PaymentBadge method={h.payment_method} size="sm" />
+                          </div>
+                        </div>
+                        <div>
                           <div className="text-[9px] uppercase tracking-widest text-text-secondary mb-1">Total</div>
-                          <div className="font-mono text-xs text-text-primary">{formatCurrency(h.total_amount)}</div>
+                          <div className="font-mono text-xs text-text-primary font-bold">{formatCurrency(h.total_amount)}</div>
                         </div>
                       </div>
                     </div>
@@ -408,60 +450,111 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             {redeemSuccess && <div className="text-[#4ade80] bg-[#163a24] border border-[#1d5230] text-xs uppercase tracking-widest font-bold mb-4 p-3">{redeemSuccess}</div>}
 
             {redeemStep === 1 ? (
-              <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-2">
-                {offers.length === 0 ? (
-                  <div className="p-4 text-center text-text-secondary text-xs uppercase tracking-widest border border-border-hairline border-dashed">
-                    No offers configured for this branch.
+              <>
+                {!customer?.email && (
+                  <div className="mb-4 p-3.5 bg-[#3a2e16] border border-[#52411d] text-accent-gold text-xs flex items-start gap-2.5 rounded">
+                    <Mail size={16} className="shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold uppercase tracking-wider block mb-1">Email Required for Redemption</span>
+                      This customer has no registered email address on file. Please edit their profile to add an email address before claiming rewards.
+                    </div>
                   </div>
-                ) : (
-                  offers.map(offer => {
-                    const canAfford = customer.points_balance >= offer.points_required;
-                    return (
-                      <div 
-                        key={offer.id} 
-                        className={`p-4 border flex justify-between items-center transition-colors ${
-                          canAfford 
-                            ? "border-border-hairline hover:border-accent-gold bg-bg-panel hover:bg-bg-panel-elevated cursor-pointer" 
-                            : "border-border-hairline/30 bg-bg-base opacity-50 cursor-not-allowed"
-                        }`}
-                        onClick={() => { if (canAfford && !redeeming) handleRequestOTP(offer.id); }}
-                      >
-                        <div className="text-sm font-medium text-text-primary">{offer.name}</div>
-                        <div className="flex items-center gap-4">
-                          <div className={`font-mono text-xs font-bold ${canAfford ? 'text-accent-gold' : 'text-text-secondary'}`}>
-                            {offer.points_required} pts
-                          </div>
-                          {canAfford && (
-                            <div className="text-[10px] uppercase font-bold tracking-widest text-text-secondary opacity-0 group-hover:opacity-100">
-                              Send Code &rarr;
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
                 )}
-              </div>
+                <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-2">
+                  {offers.length === 0 ? (
+                    <div className="p-4 text-center text-text-secondary text-xs uppercase tracking-widest border border-border-hairline border-dashed">
+                      No offers configured for this branch.
+                    </div>
+                  ) : (
+                    offers.map(offer => {
+                      const canAfford = customer.points_balance >= offer.points_required;
+                      const hasEmail = Boolean(customer?.email && customer.email.trim());
+                      const isClickable = canAfford && hasEmail && !redeeming;
+                      return (
+                        <div 
+                          key={offer.id} 
+                          className={`p-4 border flex justify-between items-center transition-colors ${
+                            isClickable 
+                              ? "border-border-hairline hover:border-accent-gold bg-bg-panel hover:bg-bg-panel-elevated cursor-pointer group" 
+                              : "border-border-hairline/30 bg-bg-base opacity-50 cursor-not-allowed"
+                          }`}
+                          onClick={() => { if (isClickable) handleRequestOTP(offer.id); }}
+                        >
+                          <div>
+                            <div className="text-sm font-medium text-text-primary">{offer.name}</div>
+                            {!hasEmail && (
+                              <div className="text-[10px] text-[#ff6b6b] mt-0.5">Email required</div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className={`font-mono text-xs font-bold ${canAfford ? 'text-accent-gold' : 'text-text-secondary'}`}>
+                              {offer.points_required} pts
+                            </div>
+                            {isClickable && (
+                              <div className="text-[10px] uppercase font-bold tracking-widest text-text-secondary opacity-0 group-hover:opacity-100 flex items-center gap-1 text-accent-gold">
+                                <Mail size={12} /> Send Code &rarr;
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
             ) : (
               <div className="space-y-4 mb-6">
+                <div className="p-4 bg-bg-base/80 border border-border-hairline rounded space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-accent-gold uppercase tracking-wider">
+                    <Mail size={15} /> Code Sent to Email Inbox
+                  </div>
+                  <p className="text-xs text-text-primary leading-relaxed">
+                    A 6-digit verification code was dispatched to the customer's registered email:
+                  </p>
+                  <div className="font-mono text-sm font-bold text-accent-gold bg-bg-panel px-3 py-1.5 border border-border-hairline inline-block rounded">
+                    {customer?.email}
+                  </div>
+                  <p className="text-[11px] text-text-secondary">
+                    Ask the customer to check their email inbox (and spam folder) for the verification code. Code expires in 10 minutes.
+                  </p>
+                </div>
+
                 <div>
-                  <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1.5">Verification Code *</label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest">
+                      Verification Code *
+                    </label>
+                    {redeemCooldown > 0 ? (
+                      <span className="text-[10px] font-mono text-text-secondary flex items-center gap-1">
+                        <Clock size={11} /> Resend in {redeemCooldown}s
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleRequestOTP(selectedOfferId)}
+                        disabled={redeeming}
+                        className="text-[10px] font-mono text-accent-gold hover:underline flex items-center gap-1"
+                      >
+                        <Mail size={11} /> Resend Code to Email
+                      </button>
+                    )}
+                  </div>
                   <input 
                     type="text" 
                     value={otp} 
-                    onChange={e => setOtp(e.target.value)} 
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, ""))} 
                     placeholder="Enter 6-digit code" 
                     className="block w-full bg-bg-base border border-border-hairline p-3 text-text-primary text-sm font-mono tracking-widest focus:border-accent-gold focus:outline-none"
                     maxLength={6}
+                    autoFocus
                   />
-                  <p className="text-[10px] text-text-secondary mt-2">Ask the customer for the code sent to their email.</p>
                 </div>
                 <button 
                   onClick={handleConfirmRedemption}
                   disabled={redeeming || otp.length < 6}
-                  className="w-full py-3 font-bold text-xs uppercase tracking-widest bg-accent-gold text-white hover:bg-opacity-90 transition-colors disabled:opacity-50"
+                  className="w-full py-3 font-bold text-xs uppercase tracking-widest bg-accent-gold text-bg-base hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
-                  {redeeming ? "Verifying..." : "Confirm Redemption"}
+                  {redeeming ? "Verifying Code..." : "Confirm & Redeem Reward"}
                 </button>
               </div>
             )}
@@ -570,8 +663,36 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               {logVisitError && <div className="text-[#ff6b6b] text-[10px] uppercase tracking-widest font-bold mb-4">{logVisitError}</div>}
               {logVisitSuccess && <div className="text-[#4ade80] text-[10px] uppercase tracking-widest font-bold mb-4">{logVisitSuccess}</div>}
 
-              <div className="border-t border-border-hairline pt-4 mt-auto">
-                <div className="flex justify-between items-center mb-6">
+              <div className="border-t border-border-hairline pt-4 mt-auto space-y-4">
+                {/* Payment Method Selector */}
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">Payment Method</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: "cash", label: "Cash", icon: Banknote, color: "text-emerald-400 border-emerald-500 bg-emerald-500/10" },
+                      { id: "upi", label: "UPI", icon: Smartphone, color: "text-purple-400 border-purple-500 bg-purple-500/10" },
+                      { id: "card", label: "Card", icon: CreditCard, color: "text-amber-400 border-amber-500 bg-amber-500/10" },
+                    ].map((opt) => {
+                      const Icon = opt.icon;
+                      const isSel = logVisitPaymentMethod === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setLogVisitPaymentMethod(opt.id as any)}
+                          className={`p-2 border rounded-sm flex flex-col items-center gap-1 transition-all ${
+                            isSel ? opt.color : "border-border-hairline bg-bg-panel hover:bg-bg-panel-elevated text-text-secondary"
+                          }`}
+                        >
+                          <Icon size={16} />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
                   <div className="text-xs font-bold uppercase tracking-widest text-text-secondary">Total</div>
                   <div className="font-mono text-xl text-text-primary">{formatCurrency(currentTotal)}</div>
                 </div>
@@ -624,6 +745,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             setShowEditVehicleModal(null);
             setVehicles(vehicles.map(v => v.id === updatedVehicle.id ? { ...v, ...updatedVehicle } : v));
           }}
+          onDelete={(deletedId) => {
+            setShowEditVehicleModal(null);
+            setVehicles(vehicles.filter(v => v.id !== deletedId));
+          }}
         />
       )}
     </main>
@@ -667,7 +792,12 @@ function EditCustomerModal({ customer, onClose, onSuccess }: { customer: any, on
         <h3 className="text-xl font-semibold mb-2 text-text-primary">Edit Profile</h3>
         <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Update customer details</p>
         
-        {error && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-6 p-3">{error}</div>}
+        {error && (
+          <div className="mb-6 text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] p-3 text-xs uppercase tracking-wider font-semibold rounded-sm">
+            <span className="font-bold block mb-0.5 font-mono">Profile Error:</span>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-5">
@@ -676,11 +806,11 @@ function EditCustomerModal({ customer, onClose, onSuccess }: { customer: any, on
               <input required type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Phone Number *</label>
-              <input required type="tel" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" />
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Phone Number * (Unique)</label>
+              <input required minLength={10} type="tel" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" />
             </div>
             <div className="col-span-2">
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Email Address</label>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Email Address (Optional)</label>
               <input type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" />
             </div>
           </div>
@@ -701,6 +831,7 @@ function AddVehicleModal({ customerId, onClose, onSuccess }: { customerId: strin
   const [formData, setFormData] = useState({ 
     vehicle_number: "", 
     vehicle_type: "sedan", 
+    vehicle_make: "",
     vehicle_model: "" 
   });
   const [loading, setLoading] = useState(false);
@@ -732,19 +863,24 @@ function AddVehicleModal({ customerId, onClose, onSuccess }: { customerId: strin
     <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="panel border-l-[3px] border-l-accent-gold p-8 w-full max-w-lg">
         <h3 className="text-xl font-semibold mb-2 text-text-primary">Add New Vehicle</h3>
-        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Register another vehicle</p>
+        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Register another vehicle to this customer</p>
         
-        {error && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-6 p-3">{error}</div>}
+        {error && (
+          <div className="mb-6 text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] p-3 text-xs uppercase tracking-wider font-semibold rounded-sm">
+            <span className="font-bold block mb-0.5 font-mono">Vehicle Error:</span>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-5">
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Number *</label>
-              <input required type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors uppercase" placeholder="e.g. KL 48 W 0055"/>
+              <input required type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors uppercase font-bold" placeholder="e.g. KL 48 W 0055"/>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Type *</label>
-              <select required value={formData.vehicle_type} onChange={e=>setFormData({...formData, vehicle_type: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors">
+              <select required value={formData.vehicle_type} onChange={e=>setFormData({...formData, vehicle_type: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors uppercase">
                 <option value="sedan">Sedan</option>
                 <option value="suv">SUV</option>
                 <option value="hatchback">Hatchback</option>
@@ -755,9 +891,13 @@ function AddVehicleModal({ customerId, onClose, onSuccess }: { customerId: strin
                 <option value="other">Other</option>
               </select>
             </div>
-            <div className="col-span-2">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Make (Brand)</label>
+              <input type="text" value={formData.vehicle_make} onChange={e=>setFormData({...formData, vehicle_make: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" placeholder="e.g. Porsche, BMW, Toyota" />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Model</label>
-              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" placeholder="e.g. Porsche 911 GT3" />
+              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" placeholder="e.g. 911 GT3, M3" />
             </div>
           </div>
           
@@ -773,13 +913,15 @@ function AddVehicleModal({ customerId, onClose, onSuccess }: { customerId: strin
   );
 }
 
-function EditVehicleModal({ vehicle, onClose, onSuccess }: { vehicle: any, onClose: () => void, onSuccess: (v: any) => void }) {
+function EditVehicleModal({ vehicle, onClose, onSuccess, onDelete }: { vehicle: any, onClose: () => void, onSuccess: (v: any) => void, onDelete?: (id: string) => void }) {
   const [formData, setFormData] = useState({ 
     vehicle_number: vehicle.vehicle_number || "", 
     vehicle_type: vehicle.vehicle_type || "sedan", 
+    vehicle_make: vehicle.vehicle_make || "",
     vehicle_model: vehicle.vehicle_model || "" 
   });
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -804,23 +946,51 @@ function EditVehicleModal({ vehicle, onClose, onSuccess }: { vehicle: any, onClo
     setLoading(false);
   };
 
+  const handleDelete = async () => {
+    if (!confirm(`Are you sure you want to remove vehicle plate ${vehicle.vehicle_number}?`)) {
+      return;
+    }
+    setDeleting(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/manager/vehicles/${vehicle.id}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onDelete?.(vehicle.id);
+      } else {
+        setError(data.error || "Failed to remove vehicle");
+        setDeleting(false);
+      }
+    } catch (err) {
+      setError("System error during deletion.");
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="panel border-l-[3px] border-l-accent-gold p-8 w-full max-w-lg">
         <h3 className="text-xl font-semibold mb-2 text-text-primary">Edit Vehicle</h3>
-        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Update vehicle details</p>
+        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Update or remove vehicle</p>
         
-        {error && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-6 p-3">{error}</div>}
+        {error && (
+          <div className="mb-6 text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] p-3 text-xs uppercase tracking-wider font-semibold rounded-sm">
+            <span className="font-bold block mb-0.5 font-mono">Vehicle Error:</span>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-5">
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Number *</label>
-              <input required type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors uppercase" />
+              <input required type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors uppercase font-bold" />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Type *</label>
-              <select required value={formData.vehicle_type} onChange={e=>setFormData({...formData, vehicle_type: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors">
+              <select required value={formData.vehicle_type} onChange={e=>setFormData({...formData, vehicle_type: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors uppercase">
                 <option value="sedan">Sedan</option>
                 <option value="suv">SUV</option>
                 <option value="hatchback">Hatchback</option>
@@ -831,17 +1001,31 @@ function EditVehicleModal({ vehicle, onClose, onSuccess }: { vehicle: any, onClo
                 <option value="other">Other</option>
               </select>
             </div>
-            <div className="col-span-2">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Make (Brand)</label>
+              <input type="text" value={formData.vehicle_make} onChange={e=>setFormData({...formData, vehicle_make: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" placeholder="e.g. Porsche, BMW, Toyota" />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Model</label>
-              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" placeholder="e.g. Porsche 911 GT3" />
+              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none transition-colors" placeholder="e.g. 911 GT3, M3" />
             </div>
           </div>
           
-          <div className="mt-8 flex justify-end gap-4 pt-4 border-t border-border-hairline">
-            <button type="button" onClick={onClose} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
-            <button type="submit" disabled={loading} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-gold text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
-              {loading ? "Saving..." : "Save Changes"}
+          <div className="mt-8 flex justify-between items-center pt-4 border-t border-border-hairline">
+            <button 
+              type="button" 
+              onClick={handleDelete} 
+              disabled={loading || deleting} 
+              className="px-4 py-2 font-bold text-xs uppercase tracking-widest text-[#ff6b6b] hover:bg-[#3a1616]/50 border border-transparent hover:border-[#521d1d] transition-colors disabled:opacity-50"
+            >
+              {deleting ? "Removing..." : "Remove Vehicle"}
             </button>
+            <div className="flex gap-3">
+              <button type="button" onClick={onClose} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
+              <button type="submit" disabled={loading || deleting} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-gold text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
+                {loading ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

@@ -2,18 +2,26 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { sendSMSRedemption } from "@/lib/sms";
+import { sendRedemptionConfirmationEmail } from "@/lib/email";
+import { isBranchMatch } from "@/lib/branch-utils";
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session || !session.user || (session.user as any).role !== "manager" && (session.user as any).role !== "admin") {
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const role = (session.user as any).role;
+  if (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const staffBranchId = (session.user as any).branch_id;
-  const staffId = (session.user as any).id;
+  const staffId = role === "branch" ? null : (session.user as any).id;
 
   try {
     const { customer_id, offer_id, otp } = await request.json();
@@ -51,7 +59,7 @@ export async function POST(request: Request) {
 
     // 2. Pre-checks (Customer, Offer, Points)
     const customerRes = await db.execute({
-      sql: `SELECT points_balance, branch_id FROM customers WHERE id = ?`,
+      sql: `SELECT points_balance, branch_id, name, phone, email FROM customers WHERE id = ?`,
       args: [customer_id],
     });
 
@@ -60,12 +68,15 @@ export async function POST(request: Request) {
     }
 
     const customer = customerRes.rows[0];
-    if (customer.branch_id !== staffBranchId) {
-      return NextResponse.json({ error: "Unauthorized: Customer belongs to a different branch" }, { status: 403 });
+    if (role !== "admin") {
+      const customerMatch = await isBranchMatch(customer.branch_id as string, staffBranchId);
+      if (!customerMatch) {
+        return NextResponse.json({ error: "Unauthorized: Customer belongs to a different branch" }, { status: 403 });
+      }
     }
 
     const offerRes = await db.execute({
-      sql: `SELECT points_required, branch_id, is_active FROM offers WHERE id = ?`,
+      sql: `SELECT name, points_required, branch_id, is_active FROM offers WHERE id = ?`,
       args: [offer_id],
     });
 
@@ -74,8 +85,11 @@ export async function POST(request: Request) {
     }
 
     const offer = offerRes.rows[0];
-    if (offer.branch_id !== staffBranchId) {
-      return NextResponse.json({ error: "Unauthorized: Offer belongs to a different branch" }, { status: 403 });
+    if (role !== "admin" && offer.branch_id) {
+      const offerMatch = await isBranchMatch(offer.branch_id as string, staffBranchId);
+      if (!offerMatch) {
+        return NextResponse.json({ error: "Unauthorized: Offer belongs to a different branch" }, { status: 403 });
+      }
     }
     if (!offer.is_active) {
       return NextResponse.json({ error: "Offer is no longer active" }, { status: 400 });
@@ -89,33 +103,81 @@ export async function POST(request: Request) {
     }
 
     // 3. Process Redemption in a transaction sequence
-    const redemptionId = uuidv4();
-    const newBalance = currentPoints - requiredPoints;
+    const redemptionId = crypto.randomUUID();
+    const redemptionBranchId = staffBranchId || (customer.branch_id as string);
 
-    await db.batch([
-      // Mark OTP as used
-      {
-        sql: `UPDATE customer_otp_codes SET used = 1 WHERE id = ?`,
+    const txn = await db.transaction("write");
+    let newBalance = 0;
+
+    try {
+      // Mark OTP as used (safe against TOCTOU)
+      const otpUpdate = await txn.execute({
+        sql: `UPDATE customer_otp_codes SET used = 1 WHERE id = ? AND used = 0`,
         args: [latestOtp.id],
-      },
-      // Deduct Points
-      {
-        sql: `UPDATE customers SET points_balance = ? WHERE id = ?`,
-        args: [newBalance, customer_id],
-      },
+      });
+      
+      if (otpUpdate.rowsAffected === 0) {
+        throw new Error("OTP_ALREADY_USED");
+      }
+
+      // Decrement Points (Atomic safety check with points_balance >= requiredPoints)
+      const pointsUpdate = await txn.execute({
+        sql: `UPDATE customers 
+              SET points_balance = points_balance - ? 
+              WHERE id = ? AND points_balance >= ?
+              RETURNING points_balance`,
+        args: [requiredPoints, customer_id, requiredPoints],
+      });
+      
+      if (pointsUpdate.rows.length === 0) {
+        throw new Error("INSUFFICIENT_POINTS");
+      }
+      
+      newBalance = Number(pointsUpdate.rows[0].points_balance);
+
       // Record Redemption
-      {
+      await txn.execute({
         sql: `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
               VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [redemptionId, customer_id, staffBranchId, staffId, offer_id, requiredPoints],
-      },
+        args: [redemptionId, customer_id, redemptionBranchId, staffId, offer_id, requiredPoints],
+      });
+
       // Ledger Entry
-      {
+      await txn.execute({
         sql: `INSERT INTO loyalty_points_ledger (id, customer_id, type, points)
               VALUES (?, ?, 'redeemed', ?)`,
         args: [uuidv4(), customer_id, requiredPoints],
+      });
+
+      await txn.commit();
+      
+      if (customer.email) {
+        sendRedemptionConfirmationEmail(
+          customer.email as string,
+          customer.name as string,
+          requiredPoints,
+          offer.name as string
+        ).catch(err => console.error("[EMAIL ERROR] Background email receipt failed:", err));
       }
-    ], "write");
+
+      if (customer.phone) {
+        sendSMSRedemption(
+          customer.phone as string, 
+          customer.name as string, 
+          requiredPoints, 
+          offer.name as string
+        ).catch(err => console.error("[SMS ERROR] Background SMS failed:", err));
+      }
+    } catch (txnError: any) {
+      await txn.rollback();
+      if (txnError.message === "OTP_ALREADY_USED") {
+        return NextResponse.json({ error: "This OTP was already used." }, { status: 400 });
+      }
+      if (txnError.message === "INSUFFICIENT_POINTS") {
+        return NextResponse.json({ error: "Insufficient points balance (or balance changed)." }, { status: 400 });
+      }
+      throw txnError;
+    }
 
     return NextResponse.json({ 
       success: true, 

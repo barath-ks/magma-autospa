@@ -7,6 +7,10 @@ import { Users, Building, Tag, Percent, Contact, LineChart, Gift } from "lucide-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
   const linkClass = (path: string) => {
     const isActive = pathname === path;
     if (isActive) {
@@ -55,7 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             My Profile
           </Link>
           <button 
-            onClick={() => signOut({ callbackUrl: "/" })} 
+            onClick={() => signOut({ callbackUrl: "/admin/login" })} 
             className="w-full text-xs font-bold text-white bg-accent-oxblood hover:bg-opacity-90 px-4 py-2.5 uppercase tracking-widest transition-colors flex justify-center items-center gap-2"
           >
             Log Out

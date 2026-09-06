@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { customerSchema } from "@/lib/validations";
 
 export async function GET(
   request: Request,
@@ -12,7 +13,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const role = (session.user as any).role;
-  if (role !== "staff" && role !== "manager" && role !== "admin") {
+  if (role !== "branch" && role !== "staff" && role !== "manager" && role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,7 +37,7 @@ export async function GET(
     // Fetch visit history (transactions + services)
     const historyResult = await db.execute({
       sql: `
-        SELECT t.id, t.created_at, t.total_amount, t.points_awarded, t.status, t.vehicle_model, t.vehicle_number, u.name as staff_name, b.name as branch_name,
+        SELECT t.id, t.created_at, t.total_amount, t.points_awarded, t.status, t.payment_method, t.vehicle_model, t.vehicle_number, u.name as staff_name, b.name as branch_name,
                (
                  SELECT json_group_array(json_object('name', s.name, 'price', ts.price_at_time))
                  FROM transaction_services ts
@@ -98,7 +99,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const role = (session.user as any).role;
-  if (role !== "staff" && role !== "manager" && role !== "admin") {
+  if (role !== "branch" && role !== "staff" && role !== "manager" && role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -122,8 +123,24 @@ export async function PATCH(
     // Explicit allowlist extraction
     const { name, phone, email } = body;
 
-    if (!name || !phone) {
-      return NextResponse.json({ error: "Name and Phone are required." }, { status: 400 });
+    const validationResult = customerSchema.safeParse({ name, phone, email });
+    if (!validationResult.success) {
+      const msg = validationResult.error.issues?.[0]?.message || "Invalid customer details.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+
+    const cleanPhone = phone.trim();
+
+    // Check if phone belongs to another customer
+    const phoneConflict = await db.execute({
+      sql: `SELECT id, name FROM customers WHERE phone = ? AND id != ?`,
+      args: [cleanPhone, id]
+    });
+    if (phoneConflict.rows.length > 0) {
+      const conflictingName = phoneConflict.rows[0].name;
+      return NextResponse.json({ 
+        error: `Phone number ${cleanPhone} is already in use by customer ${conflictingName}.` 
+      }, { status: 409 });
     }
 
     // Verify ownership for non-admin
@@ -139,7 +156,7 @@ export async function PATCH(
 
     await db.execute({
       sql: `UPDATE customers SET name = ?, phone = ?, email = ? WHERE id = ?`,
-      args: [name, phone, email || null, id]
+      args: [name.trim(), cleanPhone, email ? email.trim() : null, id]
     });
 
     return NextResponse.json({ success: true, message: "Customer profile updated successfully." });

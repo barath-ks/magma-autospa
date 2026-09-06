@@ -81,7 +81,7 @@ async function verify() {
     // Setup an offer
     const serviceRes = await db.execute("SELECT id FROM services LIMIT 1");
     const serviceId = serviceRes.rows[0].id;
-    let offerRes = await db.execute(`SELECT id FROM offers WHERE branch_id = ? LIMIT 1`, [mgr.branch_id]);
+    const offerRes = await db.execute(`SELECT id FROM offers WHERE branch_id = ? LIMIT 1`, [mgr.branch_id]);
     let offerId = null;
     if (offerRes.rows.length === 0) {
       const newOfferId = `test-offer-${Date.now()}`;

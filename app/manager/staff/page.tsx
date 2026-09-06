@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Users, Plus, KeyRound } from "lucide-react";
+import { Users, Plus, KeyRound, Eye, EyeOff } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 
 export default function ManageStaffPage() {
@@ -16,6 +16,7 @@ export default function ManageStaffPage() {
   const [error, setError] = useState("");
   
   const [createdUser, setCreatedUser] = useState<any>(null);
+  const [showTempPassword, setShowTempPassword] = useState(false);
 
   const fetchStaff = async () => {
     try {
@@ -91,8 +92,8 @@ export default function ManageStaffPage() {
                   <p className="text-[10px] text-text-secondary mt-1">Required for OTP password resets.</p>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Email Address (Optional)</label>
-                  <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none" />
+                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Email Address *</label>
+                  <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="e.g. staff@magma-autospa.com" className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-gold focus:outline-none" />
                 </div>
               </div>
               <div className="flex justify-end gap-4 pt-4 border-t border-border-hairline">
@@ -152,7 +153,19 @@ export default function ManageStaffPage() {
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary mb-1">Temporary Password</div>
-                <div className="text-xl font-mono text-accent-gold tracking-widest">{createdUser.temp_password}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-xl font-mono text-accent-gold tracking-widest">
+                    {showTempPassword ? createdUser.temp_password : "••••••••"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTempPassword(!showTempPassword)}
+                    className="text-text-secondary hover:text-text-primary transition-colors focus:outline-none p-1"
+                    aria-label={showTempPassword ? "Hide password" : "Show password"}
+                  >
+                    {showTempPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
             </div>
 

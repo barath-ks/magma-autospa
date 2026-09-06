@@ -55,7 +55,7 @@ async function run() {
 
     // 0. Initial state
     let mgrBadges = await getBadges(mgrCookie);
-    let initialCount = mgrBadges.managerScheduleBadge;
+    const initialCount = mgrBadges.managerScheduleBadge;
     console.log(`Initial Manager pending count: ${initialCount}`);
 
     // 1. Staff submits request
@@ -77,7 +77,7 @@ async function run() {
     console.log("✅ Manager badge count correctly increased by 1.");
 
     // Verify Other Manager Badge (Branch isolation)
-    let otherMgrBadges = await getBadges(otherMgrCookie);
+    const otherMgrBadges = await getBadges(otherMgrCookie);
     console.log(`Other manager pending count (different branch): ${otherMgrBadges.managerScheduleBadge}`);
 
     // 2. Manager Approves Request

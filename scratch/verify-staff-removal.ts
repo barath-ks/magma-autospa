@@ -12,8 +12,8 @@ async function runTests() {
   try {
     // 1. Setup Data
     // Ensure we have a staff user and a manager user
-    let staffRes = await db.execute("SELECT * FROM users WHERE role = 'staff' LIMIT 1");
-    let managerRes = await db.execute("SELECT * FROM users WHERE role = 'manager' LIMIT 1");
+    const staffRes = await db.execute("SELECT * FROM users WHERE role = 'staff' LIMIT 1");
+    const managerRes = await db.execute("SELECT * FROM users WHERE role = 'manager' LIMIT 1");
     
     if (staffRes.rows.length === 0 || managerRes.rows.length === 0) {
       console.log("Need both a staff and a manager in DB to test. Existing roles:");
@@ -88,7 +88,7 @@ async function runTests() {
     const customerId = customerRes.rows[0].id;
 
     // Fetch a service
-    let serviceRes = await db.execute("SELECT id FROM services LIMIT 1");
+    const serviceRes = await db.execute("SELECT id FROM services LIMIT 1");
     const serviceId = serviceRes.rows[0].id;
 
     console.log("Step A: Manager creating a job...");

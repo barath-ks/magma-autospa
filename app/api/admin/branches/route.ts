@@ -2,25 +2,41 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import crypto from "crypto";
 import bcrypt from "bcryptjs";
+
+const createBranchSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  code: z.string().min(2, "Code must be at least 2 characters"),
+  location: z.string().min(5, "Address must be at least 5 characters"),
+  phone: z.string().min(10, "Phone must be at least 10 characters"),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  password: z.string().min(6, "Password must be at least 6 characters").optional().or(z.literal("")),
+  must_change_password: z.boolean().optional(),
+});
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if ((session.user as any).role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: Only Admins can view branches" }, { status: 403 });
+  if (!session || !session.user || (session.user as any).role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   try {
-    const result = await db.execute("SELECT id, name, location, created_at FROM branches ORDER BY name ASC");
-    return NextResponse.json({ branches: result.rows });
+    const branches = await db.execute(`
+      SELECT 
+        b.id, b.name, b.code, b.branch_code, b.email, b.display_password, b.must_change_password, b.location, b.phone, b.is_active, b.created_at,
+        (SELECT COUNT(*) FROM users u WHERE u.branch_id = b.id AND u.role = 'staff' AND u.is_active = 1) as active_staff_count,
+        (SELECT u.id FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = 1 LIMIT 1) as manager_id,
+        (SELECT u.name FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = 1 LIMIT 1) as manager_name
+      FROM branches b
+      ORDER BY b.created_at DESC
+    `);
+    
+    return NextResponse.json({ branches: branches.rows });
   } catch (error) {
+    console.error("Error fetching branches:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }
@@ -28,82 +44,65 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if ((session.user as any).role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: Only Admins can create branches" }, { status: 403 });
+  if (!session || !session.user || (session.user as any).role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   try {
     const body = await request.json();
-    const { name, location, manager_name, manager_phone, manager_email } = body;
-
-    if (!name || !location || !manager_name) {
-      return NextResponse.json({ error: "Branch name, location, and manager name are required" }, { status: 400 });
+    const result = createBranchSchema.safeParse(body);
+    
+    if (!result.success) {
+      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
+    
+    const { name, code, location, phone, email, password, must_change_password } = result.data;
+    const branchCode = code.toUpperCase();
+    const branchEmail = email && email.trim() !== "" ? email.trim() : `${code.toLowerCase()}@magma-autospa.com`;
 
-    // App-level check for duplicate branch name to return a clean error
-    const duplicateCheck = await db.execute({ sql: "SELECT id FROM branches WHERE name = ?", args: [name] });
-    if (duplicateCheck.rows.length > 0) {
-      return NextResponse.json({ error: "A branch with this name already exists" }, { status: 400 });
-    }
-
-    // Generate branch ID
-    const branchId = uuidv4();
-
-    // Generate Manager Login ID
-    const prefix = 'MGR-';
-    const idResult = await db.execute({
-      sql: `SELECT login_id FROM users WHERE role = 'manager' AND login_id LIKE ? ORDER BY login_id DESC LIMIT 1`,
-      args: [`${prefix}%`]
+    // Check for duplicate code, name, or email
+    const existing = await db.execute({
+      sql: `SELECT id FROM branches 
+            WHERE (name = ? COLLATE NOCASE OR code = ? COLLATE NOCASE OR branch_code = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)`,
+      args: [name, code, branchCode, branchEmail]
     });
 
-    let nextNum = 1;
-    if (idResult.rows.length > 0) {
-      const lastId = idResult.rows[0].login_id as string;
-      const numericPart = parseInt(lastId.replace(prefix, ''), 10);
-      if (!isNaN(numericPart)) {
-        nextNum = numericPart + 1;
-      }
+    if (existing.rows.length > 0) {
+      return NextResponse.json({ error: "A branch with this name, code, or email already exists" }, { status: 400 });
     }
-    const newLoginId = `${prefix}${nextNum.toString().padStart(4, '0')}`;
 
-    // Generate Manager Temporary Password (NEVER logged or persisted in plaintext!)
-    const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 chars
-    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
-    const userId = crypto.randomUUID();
+    // Determine temporary password
+    const tempPassword = password && password.trim() !== "" ? password.trim() : `Magma@${Math.floor(1000 + Math.random() * 9000)}`;
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const mustChange = must_change_password !== undefined ? (must_change_password ? 1 : 0) : 1;
 
-    // Perform inserts in a single batch (pseudo-transaction for Turso/SQLite)
-    await db.batch([
-      {
-        sql: "INSERT INTO branches (id, name, location, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-        args: [branchId, name, location]
-      },
-      {
-        sql: `INSERT INTO users (id, login_id, password_hash, role, name, email, phone, branch_id, must_change_password)
-              VALUES (?, ?, ?, 'manager', ?, ?, ?, ?, 1)`,
-        args: [userId, newLoginId, tempPasswordHash, manager_name, manager_email || null, manager_phone || null, branchId]
-      }
-    ]);
-
-    // Return the newly created branch info and the manager credentials
-    return NextResponse.json({
-      success: true,
-      branch: { id: branchId, name, location },
-      manager: {
-        login_id: newLoginId,
-        temp_password: tempPassword, // Sent strictly over HTTPS, never logged server-side
-        name: manager_name
-      }
+    const id = uuidv4();
+    await db.execute({
+      sql: `INSERT INTO branches (
+              id, name, code, branch_code, email, password_hash, display_password, 
+              must_change_password, location, address, phone, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      args: [id, name, code, branchCode, branchEmail, passwordHash, tempPassword, mustChange, location, location, phone]
     });
 
-  } catch (error: any) {
+    return NextResponse.json({ 
+      success: true, 
+      branch: { 
+        id, 
+        name, 
+        code, 
+        branch_code: branchCode, 
+        email: branchEmail, 
+        display_password: tempPassword,
+        must_change_password: mustChange,
+        location, 
+        phone, 
+        is_active: 1 
+      } 
+    });
+  } catch (error) {
     console.error("Error creating branch:", error);
-    if (error?.message?.includes("UNIQUE constraint failed")) {
-      return NextResponse.json({ error: "A unique constraint failed (likely branch name or login ID)" }, { status: 400 });
-    }
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

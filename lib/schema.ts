@@ -3,7 +3,15 @@ export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS branches (
   id TEXT PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
+  code TEXT UNIQUE,
+  branch_code TEXT UNIQUE,
+  email TEXT UNIQUE,
+  password_hash TEXT,
+  display_password TEXT,
+  must_change_password BOOLEAN DEFAULT 1,
   location TEXT NOT NULL,
+  address TEXT,
+  phone TEXT,
   is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -15,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT CHECK(role IN ('staff', 'manager', 'admin')) NOT NULL,
   name TEXT NOT NULL,
-  email TEXT,
+  email TEXT UNIQUE NOT NULL,
   phone TEXT,
   branch_id TEXT,
   must_change_password BOOLEAN DEFAULT 1,
@@ -54,6 +62,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
   vehicle_number TEXT UNIQUE NOT NULL,
   vehicle_type TEXT CHECK(vehicle_type IN ('sedan', 'suv', 'hatchback', 'xuv', 'truck', 'van', 'bike', 'other')) NOT NULL,
   vehicle_model TEXT,
+  vehicle_make TEXT,
   is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
@@ -66,6 +75,9 @@ CREATE TABLE IF NOT EXISTS services (
   description TEXT DEFAULT '',
   price REAL NOT NULL,
   points_earned INTEGER NOT NULL DEFAULT 10,
+  duration_minutes INTEGER,
+  category TEXT,
+  branch_id TEXT REFERENCES branches(id) ON DELETE CASCADE,
   is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -75,11 +87,15 @@ CREATE TABLE IF NOT EXISTS offers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
-  points_required INTEGER NOT NULL,
-  branch_id TEXT NOT NULL,
+  discount_type TEXT DEFAULT 'reward',
+  discount_value REAL,
+  points_required INTEGER DEFAULT 0,
+  min_spend REAL DEFAULT 0,
+  start_date DATETIME,
+  end_date DATETIME,
+  branch_id TEXT REFERENCES branches(id) ON DELETE CASCADE,
   is_active BOOLEAN DEFAULT 1,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Transactions Table
@@ -91,6 +107,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   total_amount REAL NOT NULL,
   points_awarded INTEGER NOT NULL,
   status TEXT CHECK(status IN ('pending', 'in_progress', 'finished')) DEFAULT 'pending',
+  payment_method TEXT CHECK(payment_method IN ('cash', 'upi', 'card')) DEFAULT 'cash',
   vehicle_id TEXT,
   vehicle_number TEXT,
   vehicle_model TEXT,
@@ -173,13 +190,13 @@ CREATE TABLE IF NOT EXISTS redemptions (
   id TEXT PRIMARY KEY,
   customer_id TEXT NOT NULL,
   branch_id TEXT NOT NULL,
-  staff_id TEXT NOT NULL,
+  staff_id TEXT,
   offer_id TEXT NOT NULL,
   points_redeemed INTEGER NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE RESTRICT,
-  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE RESTRICT,
+  FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL,
   FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE RESTRICT
 );
 
@@ -212,7 +229,7 @@ CREATE TABLE IF NOT EXISTS service_offers (
   id TEXT PRIMARY KEY,
   service_id TEXT NOT NULL,
   offer_price REAL NOT NULL,
-  branch_id TEXT,
+  branch_id TEXT NOT NULL,
   is_active BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
@@ -225,10 +242,11 @@ CREATE TABLE IF NOT EXISTS combos (
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
   bundle_price REAL NOT NULL,
-  branch_id TEXT,
+  start_date DATETIME,
+  end_date DATETIME,
+  branch_id TEXT REFERENCES branches(id) ON DELETE CASCADE,
   is_active BOOLEAN DEFAULT 1,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Combo Services Join Table

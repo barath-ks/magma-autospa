@@ -2,19 +2,31 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
+import { sendOtpEmail } from "@/lib/email";
+import { isBranchMatch } from "@/lib/branch-utils";
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+function maskEmail(email: string): string {
+  if (!email || !email.includes("@")) return email;
+  const [user, domain] = email.split("@");
+  if (user.length <= 2) return `${user[0] || ""}***@${domain}`;
+  return `${user.slice(0, 2)}***${user.slice(-1)}@${domain}`;
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session || !session.user || (session.user as any).role !== "manager" && (session.user as any).role !== "admin") {
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const role = (session.user as any).role;
+  if (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -29,7 +41,7 @@ export async function POST(request: Request) {
 
     // 1. Verify customer belongs to this branch
     const customerRes = await db.execute({
-      sql: `SELECT points_balance, branch_id, email FROM customers WHERE id = ?`,
+      sql: `SELECT points_balance, branch_id, email, name FROM customers WHERE id = ?`,
       args: [customer_id],
     });
 
@@ -38,21 +50,25 @@ export async function POST(request: Request) {
     }
 
     const customer = customerRes.rows[0];
-    if (customer.branch_id !== staffBranchId) {
-      return NextResponse.json({ error: "Unauthorized: Customer belongs to a different branch" }, { status: 403 });
+    if (role !== "admin") {
+      const customerMatch = await isBranchMatch(customer.branch_id as string, staffBranchId);
+      if (!customerMatch) {
+        return NextResponse.json({ error: "Unauthorized: Customer belongs to a different branch" }, { status: 403 });
+      }
     }
 
-    // TODO: Temporary limitation. SMS/WhatsApp OTP delivery is planned as a future alternative channel
-    // once the business completes DLT registration. Once implemented, check for phone if email is absent.
-    if (!customer.email || customer.email.trim() === "") {
+    // Ensure customer has a registered email address for verification
+    if (!customer.email || typeof customer.email !== "string" || !customer.email.trim()) {
       return NextResponse.json({ 
-        error: "This customer has no email on file — redemption verification requires an email or phone number. Please add an email to their profile, or ask them to provide one, to proceed." 
+        error: "This customer has no registered email on file. An email address is required to receive the redemption verification code. Please update their profile to add an email." 
       }, { status: 400 });
     }
 
+    const cleanEmail = customer.email.trim();
+
     // 2. Verify offer belongs to this branch and is active
     const offerRes = await db.execute({
-      sql: `SELECT points_required, branch_id, is_active FROM offers WHERE id = ?`,
+      sql: `SELECT name, points_required, branch_id, is_active FROM offers WHERE id = ?`,
       args: [offer_id],
     });
 
@@ -61,8 +77,11 @@ export async function POST(request: Request) {
     }
 
     const offer = offerRes.rows[0];
-    if (offer.branch_id !== staffBranchId) {
-      return NextResponse.json({ error: "Unauthorized: Offer belongs to a different branch" }, { status: 403 });
+    if (role !== "admin" && offer.branch_id) {
+      const offerMatch = await isBranchMatch(offer.branch_id as string, staffBranchId);
+      if (!offerMatch) {
+        return NextResponse.json({ error: "Unauthorized: Offer belongs to a different branch" }, { status: 403 });
+      }
     }
     if (!offer.is_active) {
       return NextResponse.json({ error: "Offer is no longer active" }, { status: 400 });
@@ -82,39 +101,33 @@ export async function POST(request: Request) {
     const otpId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
+    // Invalidate existing unused redemption OTPs for this customer
     await db.execute({
-      sql: `INSERT INTO customer_otp_codes (id, customer_id, channel, code_hash, purpose, expires_at)
-            VALUES (?, ?, 'email', ?, 'redemption', ?)`,
+      sql: `UPDATE customer_otp_codes SET used = 1 WHERE customer_id = ? AND purpose = 'redemption' AND used = 0`,
+      args: [customer_id],
+    });
+
+    await db.execute({
+      sql: `INSERT INTO customer_otp_codes (id, customer_id, channel, code_hash, purpose, expires_at, used)
+            VALUES (?, ?, 'email', ?, 'redemption', ?, 0)`,
       args: [otpId, customer_id, hash, expiresAt],
     });
 
-    // 5. Send OTP via email
-    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT) || 587,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-        },
-      });
+    // 5. Send OTP exclusively via Email using unified helper
+    const emailSent = await sendOtpEmail(cleanEmail, otp, {
+      purpose: "loyalty_claim",
+      recipientName: customer.name as string,
+      offerName: offer.name as string,
+      pointsRequired: requiredPoints,
+    });
 
-      const messageText = `Your Magma Autospa redemption verification code is: ${otp}. Share this code with the staff member assisting you to complete your reward redemption. This code expires in 10 minutes.`;
-
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || process.env.SMTP_USER,
-        to: customer.email as string,
-        subject: "Magma Autospa - Redemption Verification Code",
-        text: messageText,
-      });
-      console.log(`[SMTP LIVE TEST] Sent OTP ${otp} to ${customer.email}`);
-    } else {
-      console.log(`[SMTP MOCK] Sent OTP ${otp} to ${customer.email}`);
-    }
+    const masked = maskEmail(cleanEmail);
 
     return NextResponse.json({ 
       success: true, 
-      message: "OTP sent successfully" 
+      message: `Verification code sent to customer's registered email (${masked})`,
+      email: cleanEmail,
+      masked_email: masked,
     });
 
   } catch (error) {

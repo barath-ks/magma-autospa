@@ -11,7 +11,8 @@ function LoginForm() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const role = searchParams.get("role") || "staff";
+  const rawRole = searchParams.get("role") || "branch";
+  const role = rawRole === "staff" ? "branch" : rawRole;
 
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -26,10 +27,9 @@ function LoginForm() {
         const userRole = (session.user as any).role;
         if (userRole === "admin") router.push("/admin");
         else if (userRole === "manager") router.push("/manager");
-        else if (userRole === "staff") router.push("/staff");
+        else if (userRole === "branch") router.push("/branch/dashboard");
       } else {
         // If they are "authenticated" but missing a role, their token is broken/expired.
-        // Force a sign out to destroy the corrupted cookie so they can log in again.
         signOut({ redirect: false });
       }
     }
@@ -48,21 +48,21 @@ function LoginForm() {
     });
 
     if (res?.error) {
-      setError("Invalid login ID or password");
+      setError("Invalid credentials. Please verify your login details.");
       setLoading(false);
     }
   };
 
-  // Only block the screen if they are actually loading, OR if they have a fully valid authenticated session with a role.
   if (status === "loading" || (status === "authenticated" && (session?.user as any)?.role)) {
     return <div className="text-text-primary z-20 relative font-bold">Authenticating...</div>;
   }
 
   let theme = {
-    title: "STAFF ACCESS",
+    title: "BRANCH ACCESS",
     accentText: "text-accent-copper",
     btnBg: "bg-accent-copper hover:bg-opacity-90",
-    inputLabel: "Staff ID"
+    inputLabel: "Branch Email or Code",
+    placeholder: "e.g. main@magma-autospa.com or MAG-BRANCH-01"
   };
 
   if (role === "manager") {
@@ -70,14 +70,16 @@ function LoginForm() {
       title: "MANAGER ACCESS",
       accentText: "text-accent-gold",
       btnBg: "bg-accent-gold hover:bg-opacity-90",
-      inputLabel: "Manager ID"
+      inputLabel: "Manager ID",
+      placeholder: "e.g. MGR-0001"
     };
   } else if (role === "admin") {
     theme = {
       title: "ADMIN ACCESS",
       accentText: "text-accent-oxblood",
       btnBg: "bg-accent-oxblood hover:bg-opacity-90",
-      inputLabel: "Admin ID"
+      inputLabel: "Admin ID",
+      placeholder: "e.g. ADM-0001"
     };
   }
 
@@ -103,8 +105,8 @@ function LoginForm() {
             type="text"
             value={loginId}
             onChange={(e) => setLoginId(e.target.value)}
-            className="block w-full rounded border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all"
-            placeholder={`e.g. ${role === 'staff' ? 'MAG-0001' : role === 'manager' ? 'MGR-0001' : 'ADM-0001'}`}
+            className="block w-full rounded border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all uppercase tracking-wider"
+            placeholder={theme.placeholder}
             required
           />
         </div>
@@ -112,7 +114,7 @@ function LoginForm() {
         <div>
           <div className="flex justify-between items-end mb-2">
             <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest">Password</label>
-            <Link href={`/login/forgot-password?role=${role}`} className="text-xs font-medium text-text-secondary hover:text-text-primary transition-colors">
+            <Link href={`/auth/forgot-password?role=${role}`} className="text-xs font-medium text-text-secondary hover:text-text-primary transition-colors">
               Forgot Password?
             </Link>
           </div>
@@ -150,7 +152,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className={`w-full rounded ${theme.btnBg} p-3.5 text-white font-bold transition-all duration-200 mt-8 disabled:opacity-50 hover:brightness-110 active:brightness-95`}
+          className={`w-full rounded ${theme.btnBg} p-3.5 text-white font-bold transition-all duration-200 mt-8 disabled:opacity-50 hover:brightness-110 active:brightness-95 uppercase tracking-wider`}
         >
           {loading ? "AUTHENTICATING..." : "SIGN IN"}
         </button>
@@ -189,7 +191,6 @@ export default function LoginPage() {
 
       {/* RIGHT HALF: Login Form */}
       <div className="w-full lg:w-[55%] flex items-center justify-center bg-bg-panel p-6 relative">
-        {/* Mobile-only branding since left half is hidden on small screens */}
         <div className="absolute top-12 left-0 w-full flex justify-center lg:hidden">
           <h1 className="font-serif text-3xl text-text-primary">Magma Autospa</h1>
         </div>

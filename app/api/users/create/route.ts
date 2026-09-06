@@ -27,6 +27,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Name and role are required" }, { status: 400 });
     }
 
+    // Validate email is compulsory and valid format
+    if (!email || typeof email !== "string" || !email.trim()) {
+      return NextResponse.json({ error: "Email address is required" }, { status: 400 });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
+    }
+
+    // Check email uniqueness
+    const existingEmail = await db.execute({
+      sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
+      args: [cleanEmail],
+    });
+
+    if (existingEmail.rows.length > 0) {
+      return NextResponse.json({ error: "A user with this email address already exists" }, { status: 400 });
+    }
+
     // Role-based restrictions
     if (sessionRole === 'manager') {
       if (role !== 'staff') {
@@ -75,7 +96,7 @@ export async function POST(request: Request) {
     await db.execute({
       sql: `INSERT INTO users (id, login_id, password_hash, role, name, email, phone, branch_id, must_change_password)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      args: [userId, newLoginId, tempPasswordHash, role, name, email || null, phone || null, branch_id]
+      args: [userId, newLoginId, tempPasswordHash, role, name, cleanEmail, phone || null, branch_id]
     });
 
     return NextResponse.json({ 

@@ -1,38 +1,67 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, CheckCircle2, XCircle } from "lucide-react";
-import Breadcrumbs from "@/components/Breadcrumbs";
-import { formatCurrency } from "@/lib/format";
 
-export default function OffersCombosPage() {
-  const [activeTab, setActiveTab] = useState<"offers" | "combos">("offers");
-  
-  const [services, setServices] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  
-  const [serviceOffers, setServiceOffers] = useState<any[]>([]);
-  const [combos, setCombos] = useState<any[]>([]);
+import React, { useEffect, useState } from "react";
+import { Plus, Edit2, Trash2, MapPin, Globe, Calendar, Tag, Gift, Percent, Layers, X, Target } from "lucide-react";
+
+interface Branch { id: string; name: string; }
+interface Service { id: string; name: string; branch_id: string | null; }
+
+interface Offer {
+  id: string;
+  name: string;
+  description: string;
+  discount_type: 'percentage' | 'flat' | 'multiplier' | 'reward';
+  discount_value: number;
+  points_required: number;
+  min_spend: number;
+  start_date: string | null;
+  end_date: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  is_active: number;
+}
+
+interface Combo {
+  id: string;
+  name: string;
+  description: string;
+  bundle_price: number;
+  start_date: string | null;
+  end_date: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  is_active: number;
+  services: { service_id: string; service_name: string }[];
+}
+
+export default function AdminOffersPage() {
+  const [activeTab, setActiveTab] = useState<'offers' | 'combos'>('offers');
   const [loading, setLoading] = useState(true);
   
-  // Offer Modal State
-  const [offerModalOpen, setOfferModalOpen] = useState(false);
-  const [editingOffer, setEditingOffer] = useState<any>(null);
-  const [offerServiceId, setOfferServiceId] = useState("");
-  const [offerPrice, setOfferPrice] = useState("");
-  const [offerBranchId, setOfferBranchId] = useState("");
-  const [offerIsActive, setOfferIsActive] = useState(true);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
 
-  // Combo Modal State
-  const [comboModalOpen, setComboModalOpen] = useState(false);
-  const [editingCombo, setEditingCombo] = useState<any>(null);
-  const [comboName, setComboName] = useState("");
-  const [comboDescription, setComboDescription] = useState("");
-  const [comboPrice, setComboPrice] = useState("");
-  const [comboBranchId, setComboBranchId] = useState("");
-  const [comboServices, setComboServices] = useState<string[]>([]);
-  const [comboIsActive, setComboIsActive] = useState(true);
+  // Modals
+  const [isAddOfferOpen, setIsAddOfferOpen] = useState(false);
+  const [isEditOfferOpen, setIsEditOfferOpen] = useState(false);
+  const [isAddComboOpen, setIsAddComboOpen] = useState(false);
+  const [isEditComboOpen, setIsEditComboOpen] = useState(false);
 
-  const [saving, setSaving] = useState(false);
+  // Forms
+  const [formError, setFormError] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
+
+  const [offerForm, setOfferForm] = useState({
+    id: "", name: "", description: "", discount_type: "reward", discount_value: 0, 
+    points_required: 0, min_spend: 0, start_date: "", end_date: "", branch_id: "", is_active: true
+  });
+
+  const [comboForm, setComboForm] = useState({
+    id: "", name: "", description: "", bundle_price: 0, start_date: "", 
+    end_date: "", branch_id: "", service_ids: [] as string[], is_active: true
+  });
 
   useEffect(() => {
     fetchData();
@@ -41,323 +70,369 @@ export default function OffersCombosPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [servicesRes, branchesRes, offersRes, combosRes] = await Promise.all([
-        fetch("/api/admin/services"),
-        fetch("/api/admin/branches"),
-        fetch("/api/admin/service-offers"),
-        fetch("/api/admin/combos")
+      const [resOffers, resCombos, resBranches, resServices] = await Promise.all([
+        fetch("/api/admin/offers").then(r => r.json()),
+        fetch("/api/admin/combos").then(r => r.json()),
+        fetch("/api/admin/branches").then(r => r.json()),
+        fetch("/api/admin/services").then(r => r.json())
       ]);
-      const servicesData = await servicesRes.json();
-      const branchesData = await branchesRes.json();
-      const offersData = await offersRes.json();
-      const combosData = await combosRes.json();
-      
-      if (servicesData.services) setServices(servicesData.services.filter((s:any) => s.is_active));
-      if (branchesData.branches) setBranches(branchesData.branches);
-      if (offersData.serviceOffers) setServiceOffers(offersData.serviceOffers);
-      if (combosData.combos) setCombos(combosData.combos);
+
+      if (resOffers.offers) setOffers(resOffers.offers);
+      if (resCombos.combos) setCombos(resCombos.combos);
+      if (resBranches.branches) setBranches(resBranches.branches);
+      if (resServices.services) setServices(resServices.services);
     } catch (e) {
       console.error(e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // --- Offers Handlers ---
-  const openAddOffer = () => {
-    setEditingOffer(null);
-    setOfferServiceId(services[0]?.id || "");
-    setOfferPrice("");
-    setOfferBranchId(""); // All branches
-    setOfferIsActive(true);
-    setOfferModalOpen(true);
+  const resetOfferForm = () => {
+    setOfferForm({ id: "", name: "", description: "", discount_type: "reward", discount_value: 0, points_required: 0, min_spend: 0, start_date: "", end_date: "", branch_id: "", is_active: true });
+    setFormError("");
   };
 
-  const openEditOffer = (offer: any) => {
-    setEditingOffer(offer);
-    setOfferServiceId(offer.service_id);
-    setOfferPrice(offer.offer_price.toString());
-    setOfferBranchId(offer.branch_id || "");
-    setOfferIsActive(Boolean(offer.is_active));
-    setOfferModalOpen(true);
+  const resetComboForm = () => {
+    setComboForm({ id: "", name: "", description: "", bundle_price: 0, start_date: "", end_date: "", branch_id: "", service_ids: [], is_active: true });
+    setFormError("");
   };
 
-  const handleSaveOffer = async (e: React.FormEvent) => {
+  // OFFER HANDLERS
+  const handleOfferSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
-    setSaving(true);
-    
-    const payload = { 
-      service_id: offerServiceId, 
-      offer_price: Number(offerPrice), 
-      branch_id: offerBranchId,
-      is_active: offerIsActive 
+    setFormError("");
+    setFormLoading(true);
+
+    const payload = {
+      name: offerForm.name,
+      description: offerForm.description || undefined,
+      discount_type: offerForm.discount_type,
+      discount_value: Number(offerForm.discount_value),
+      points_required: Number(offerForm.points_required),
+      min_spend: Number(offerForm.min_spend),
+      start_date: offerForm.start_date ? new Date(offerForm.start_date).toISOString() : null,
+      end_date: offerForm.end_date ? new Date(offerForm.end_date).toISOString() : null,
+      branch_id: offerForm.branch_id || null,
+      ...(isEdit && { is_active: offerForm.is_active })
     };
 
     try {
-      const url = editingOffer ? `/api/admin/service-offers/${editingOffer.id}` : "/api/admin/service-offers";
+      const url = isEdit ? `/api/admin/offers/${offerForm.id}` : "/api/admin/offers";
       const res = await fetch(url, {
-        method: editingOffer ? "PATCH" : "POST",
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      
-      if (res.ok) {
-        setOfferModalOpen(false);
+      const data = await res.json();
+      if (!res.ok) setFormError(data.error || "Failed to save offer");
+      else {
+        isEdit ? setIsEditOfferOpen(false) : setIsAddOfferOpen(false);
         fetchData();
-      } else {
-        const data = await res.json();
-        alert(data.error);
       }
-    } catch (e) {
-      console.error(e);
-    }
-    setSaving(false);
-  };
-
-  const handleDeleteOffer = async (id: string) => {
-    if (!confirm("Are you sure you want to deactivate this offer?")) return;
-    try {
-      const res = await fetch(`/api/admin/service-offers/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      setFormError("Network error");
+    } finally {
+      setFormLoading(false);
     }
   };
 
-  // --- Combos Handlers ---
-  const openAddCombo = () => {
-    setEditingCombo(null);
-    setComboName("");
-    setComboDescription("");
-    setComboPrice("");
-    setComboBranchId(""); // All branches
-    setComboServices([]);
-    setComboIsActive(true);
-    setComboModalOpen(true);
+  const openEditOffer = (o: Offer) => {
+    setOfferForm({
+      id: o.id, name: o.name, description: o.description || "",
+      discount_type: o.discount_type, discount_value: o.discount_value || 0,
+      points_required: o.points_required || 0, min_spend: o.min_spend || 0,
+      start_date: o.start_date ? o.start_date.split('T')[0] : "",
+      end_date: o.end_date ? o.end_date.split('T')[0] : "",
+      branch_id: o.branch_id || "", is_active: o.is_active === 1
+    });
+    setIsEditOfferOpen(true);
   };
 
-  const openEditCombo = (combo: any) => {
-    setEditingCombo(combo);
-    setComboName(combo.name);
-    setComboDescription(combo.description);
-    setComboPrice(combo.bundle_price.toString());
-    setComboBranchId(combo.branch_id || "");
-    setComboServices(combo.services.map((s:any) => s.id));
-    setComboIsActive(Boolean(combo.is_active));
-    setComboModalOpen(true);
-  };
-
-  const handleToggleComboService = (serviceId: string) => {
-    setComboServices(prev => 
-      prev.includes(serviceId) ? prev.filter(id => id !== serviceId) : [...prev, serviceId]
-    );
-  };
-
-  const handleSaveCombo = async (e: React.FormEvent) => {
+  // COMBO HANDLERS
+  const handleComboSubmit = async (e: React.FormEvent, isEdit: boolean) => {
     e.preventDefault();
-    if (comboServices.length < 2) {
-      alert("A combo must include at least 2 services.");
+    setFormError("");
+    
+    if (comboForm.service_ids.length < 2) {
+      setFormError("Please select at least 2 services for a combo.");
       return;
     }
     
-    setSaving(true);
-    const payload = { 
-      name: comboName,
-      description: comboDescription,
-      bundle_price: Number(comboPrice), 
-      branch_id: comboBranchId,
-      services: comboServices,
-      is_active: comboIsActive 
+    setFormLoading(true);
+
+    const payload = {
+      name: comboForm.name,
+      description: comboForm.description || undefined,
+      bundle_price: Number(comboForm.bundle_price),
+      start_date: comboForm.start_date ? new Date(comboForm.start_date).toISOString() : null,
+      end_date: comboForm.end_date ? new Date(comboForm.end_date).toISOString() : null,
+      branch_id: comboForm.branch_id || null,
+      service_ids: comboForm.service_ids,
+      ...(isEdit && { is_active: comboForm.is_active })
     };
 
     try {
-      const url = editingCombo ? `/api/admin/combos/${editingCombo.id}` : "/api/admin/combos";
+      const url = isEdit ? `/api/admin/combos/${comboForm.id}` : "/api/admin/combos";
       const res = await fetch(url, {
-        method: editingCombo ? "PATCH" : "POST",
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      
-      if (res.ok) {
-        setComboModalOpen(false);
+      const data = await res.json();
+      if (!res.ok) setFormError(data.error || "Failed to save combo");
+      else {
+        isEdit ? setIsEditComboOpen(false) : setIsAddComboOpen(false);
         fetchData();
-      } else {
-        const data = await res.json();
-        alert(data.error);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      setFormError("Network error");
+    } finally {
+      setFormLoading(false);
     }
-    setSaving(false);
   };
 
-  const handleDeleteCombo = async (id: string) => {
-    if (!confirm("Are you sure you want to deactivate this combo?")) return;
-    try {
-      const res = await fetch(`/api/admin/combos/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
-    } catch (e) {
-      console.error(e);
-    }
+  const openEditCombo = (c: Combo) => {
+    setComboForm({
+      id: c.id, name: c.name, description: c.description || "",
+      bundle_price: c.bundle_price,
+      start_date: c.start_date ? c.start_date.split('T')[0] : "",
+      end_date: c.end_date ? c.end_date.split('T')[0] : "",
+      branch_id: c.branch_id || "", is_active: c.is_active === 1,
+      service_ids: c.services.map(s => s.service_id)
+    });
+    setIsEditComboOpen(true);
   };
+
+  const toggleComboService = (svcId: string) => {
+    setComboForm(prev => ({
+      ...prev,
+      service_ids: prev.service_ids.includes(svcId) 
+        ? prev.service_ids.filter(id => id !== svcId)
+        : [...prev.service_ids, svcId]
+    }));
+  };
+
+  const handleDelete = async (type: 'offer' | 'combo', id: string) => {
+    if (!confirm(`Are you sure you want to deactivate this ${type}?`)) return;
+    try {
+      const res = await fetch(`/api/admin/${type}s/${id}`, { method: "DELETE" });
+      if (res.ok) fetchData();
+    } catch (e) { console.error(e); }
+  };
+
+  const formatDate = (isoStr: string | null) => isoStr ? new Date(isoStr).toLocaleDateString() : 'Forever';
 
   return (
-    <main className="flex-1 p-8 lg:p-12 overflow-auto">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <Breadcrumbs items={[{ label: "System", href: "/admin" }, { label: "Offers & Combos" }]} accentClass="hover:text-accent-oxblood" />
-          <h1 className="text-3xl font-semibold text-text-primary mt-2">Offers & Combos</h1>
-          <p className="text-text-secondary mt-1 text-sm uppercase tracking-wider">Manage special service prices and bundles.</p>
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-8 font-inter">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-8 border-l-[3px] border-[#800020] pl-4">
+          <div>
+            <h1 className="text-3xl font-fraunces font-semibold tracking-tight">Offers & Combos</h1>
+            <p className="text-gray-400 mt-1">Manage promotional discounts, loyalty rewards, and service bundles.</p>
+          </div>
+          <div className="flex gap-3">
+            {activeTab === 'offers' ? (
+              <button onClick={() => { resetOfferForm(); setIsAddOfferOpen(true); }} className="flex items-center gap-2 bg-[#121212] border border-white/10 hover:border-white/30 text-white px-4 py-2 text-sm transition-colors">
+                <Plus className="w-4 h-4" /> Add Offer
+              </button>
+            ) : (
+              <button onClick={() => { resetComboForm(); setIsAddComboOpen(true); }} className="flex items-center gap-2 bg-[#121212] border border-white/10 hover:border-white/30 text-white px-4 py-2 text-sm transition-colors">
+                <Plus className="w-4 h-4" /> Add Combo
+              </button>
+            )}
+          </div>
         </div>
-        <button onClick={activeTab === 'offers' ? openAddOffer : openAddCombo} className="flex items-center gap-2 px-4 py-2 bg-accent-oxblood text-white text-xs font-bold uppercase tracking-widest hover:bg-opacity-90 transition-colors">
-          <Plus size={14} /> Add {activeTab === 'offers' ? 'Offer' : 'Combo'}
-        </button>
-      </div>
 
-      <div className="flex gap-4 mb-6 border-b border-border-hairline">
-        <button 
-          onClick={() => setActiveTab('offers')} 
-          className={`pb-3 px-2 text-sm font-bold uppercase tracking-widest transition-colors ${activeTab === 'offers' ? 'border-b-2 border-accent-oxblood text-accent-oxblood' : 'text-text-secondary hover:text-text-primary'}`}
-        >
-          Service Offers
-        </button>
-        <button 
-          onClick={() => setActiveTab('combos')} 
-          className={`pb-3 px-2 text-sm font-bold uppercase tracking-widest transition-colors ${activeTab === 'combos' ? 'border-b-2 border-accent-oxblood text-accent-oxblood' : 'text-text-secondary hover:text-text-primary'}`}
-        >
-          Combos
-        </button>
-      </div>
-
-      {loading ? (
-        <p className="text-sm font-mono text-text-secondary uppercase tracking-widest">Loading...</p>
-      ) : activeTab === 'offers' ? (
-        <div className="panel overflow-hidden border-l-[3px] border-l-accent-oxblood">
-          <table className="w-full text-left">
-            <thead className="bg-bg-panel-elevated border-b border-border-hairline text-text-secondary uppercase text-[10px] tracking-[0.2em] font-medium">
-              <tr>
-                <th className="p-4">Service</th>
-                <th className="p-4">Branch Scope</th>
-                <th className="p-4">Offer Price</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-hairline bg-bg-panel">
-              {serviceOffers.map(o => (
-                <tr key={o.id} className="hover:bg-bg-panel-elevated transition-colors">
-                  <td className="p-4">
-                    <div className="text-sm font-medium text-text-primary">{o.service_name}</div>
-                    <div className="text-[10px] text-text-secondary mt-1 uppercase tracking-wider line-through">Original: {formatCurrency(o.original_price)}</div>
-                  </td>
-                  <td className="p-4 text-text-secondary text-sm">{o.branch_name || "All Branches"}</td>
-                  <td className="p-4 font-mono text-sm text-accent-gold">{formatCurrency(o.offer_price)}</td>
-                  <td className="p-4">
-                    {o.is_active ? 
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-[#4ade80]"><CheckCircle2 size={12}/> Active</span> : 
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-text-secondary"><XCircle size={12}/> Inactive</span>
-                    }
-                  </td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => openEditOffer(o)} className="p-2 text-text-secondary hover:text-accent-oxblood transition-colors inline-block"><Edit2 size={14}/></button>
-                    {o.is_active ? (
-                      <button onClick={() => handleDeleteOffer(o.id)} className="p-2 text-text-secondary hover:text-accent-oxblood transition-colors inline-block ml-2"><Trash2 size={14}/></button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {serviceOffers.length === 0 && (
-                <tr><td colSpan={5} className="p-8 text-center text-text-secondary uppercase tracking-widest text-sm">No service offers found.</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="flex border-b border-white/10 mb-6">
+          <button onClick={() => setActiveTab('offers')} className={`px-6 py-3 font-medium transition-colors ${activeTab === 'offers' ? 'border-b-2 border-[#800020] text-white' : 'text-gray-500 hover:text-gray-300'}`}>Promotional Offers</button>
+          <button onClick={() => setActiveTab('combos')} className={`px-6 py-3 font-medium transition-colors ${activeTab === 'combos' ? 'border-b-2 border-[#800020] text-white' : 'text-gray-500 hover:text-gray-300'}`}>Service Combos</button>
         </div>
-      ) : (
-        <div className="panel overflow-hidden border-l-[3px] border-l-accent-oxblood">
-          <table className="w-full text-left">
-            <thead className="bg-bg-panel-elevated border-b border-border-hairline text-text-secondary uppercase text-[10px] tracking-[0.2em] font-medium">
-              <tr>
-                <th className="p-4">Combo Name</th>
-                <th className="p-4">Included Services</th>
-                <th className="p-4">Branch Scope</th>
-                <th className="p-4">Bundle Price</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-hairline bg-bg-panel">
-              {combos.map(c => (
-                <tr key={c.id} className="hover:bg-bg-panel-elevated transition-colors">
-                  <td className="p-4">
-                    <div className="text-sm font-medium text-text-primary">{c.name}</div>
-                    <div className="text-[10px] text-text-secondary mt-1 uppercase tracking-wider">{c.description || "No description"}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {c.services.map((s:any) => (
-                        <span key={s.id} className="bg-bg-base border border-border-hairline-strong px-2 py-1 text-[10px] uppercase tracking-wider font-medium text-text-secondary">{s.name}</span>
-                      ))}
+
+        {loading ? (
+          <div className="text-center py-20 text-gray-500">Loading data...</div>
+        ) : activeTab === 'offers' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {offers.map(o => (
+              <div key={o.id} className={`bg-[#121212] border border-white/10 p-5 flex flex-col relative ${o.is_active ? '' : 'opacity-60 grayscale'}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-fraunces text-xl font-medium">{o.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      {o.branch_id ? (
+                        <span className="flex items-center gap-1 font-mono text-xs text-[#800020] bg-[#800020]/10 px-2 py-0.5 rounded-sm"><MapPin className="w-3 h-3" /> {o.branch_name}</span>
+                      ) : (
+                        <span className="flex items-center gap-1 font-mono text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-sm"><Globe className="w-3 h-3" /> Global</span>
+                      )}
+                      {!o.is_active && <span className="text-[10px] uppercase tracking-wider text-red-400 border border-red-400/30 px-1.5 py-0.5 rounded-sm">Inactive</span>}
                     </div>
-                  </td>
-                  <td className="p-4 text-text-secondary text-sm">{c.branch_name || "All Branches"}</td>
-                  <td className="p-4 font-mono text-sm text-accent-gold">{formatCurrency(c.bundle_price)}</td>
-                  <td className="p-4">
-                    {c.is_active ? 
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-[#4ade80]"><CheckCircle2 size={12}/> Active</span> : 
-                      <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-text-secondary"><XCircle size={12}/> Inactive</span>
-                    }
-                  </td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => openEditCombo(c)} className="p-2 text-text-secondary hover:text-accent-oxblood transition-colors inline-block"><Edit2 size={14}/></button>
-                    {c.is_active ? (
-                      <button onClick={() => handleDeleteCombo(c.id)} className="p-2 text-text-secondary hover:text-accent-oxblood transition-colors inline-block ml-2"><Trash2 size={14}/></button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {combos.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-text-secondary uppercase tracking-widest text-sm">No combos found.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEditOffer(o)} className="text-gray-400 hover:text-white"><Edit2 className="w-4 h-4" /></button>
+                    {o.is_active && <button onClick={() => handleDelete('offer', o.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>}
+                  </div>
+                </div>
+                <div className="space-y-3 flex-grow text-sm text-gray-300">
+                  <p className="line-clamp-2 text-gray-400 text-xs mb-2">{o.description}</p>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="flex items-center gap-2 bg-[#0a0a0a] border border-white/5 p-2">
+                      {o.discount_type === 'percentage' && <Percent className="w-4 h-4 text-green-400 shrink-0" />}
+                      {o.discount_type === 'flat' && <Tag className="w-4 h-4 text-green-400 shrink-0" />}
+                      {o.discount_type === 'multiplier' && <Layers className="w-4 h-4 text-purple-400 shrink-0" />}
+                      {o.discount_type === 'reward' && <Gift className="w-4 h-4 text-yellow-500 shrink-0" />}
+                      <span className="font-mono">
+                        {o.discount_type === 'percentage' ? `${o.discount_value}% OFF` : ''}
+                        {o.discount_type === 'flat' ? `$${o.discount_value} OFF` : ''}
+                        {o.discount_type === 'multiplier' ? `${o.discount_value}x Pts` : ''}
+                        {o.discount_type === 'reward' ? 'Reward' : ''}
+                      </span>
+                    </div>
+                    {o.points_required > 0 && (
+                      <div className="flex items-center gap-2 bg-[#0a0a0a] border border-white/5 p-2">
+                        <Gift className="w-4 h-4 text-yellow-500 shrink-0" />
+                        <span className="font-mono">{o.points_required} pts</span>
+                      </div>
+                    )}
+                  </div>
+                  {(o.start_date || o.end_date) && (
+                    <div className="pt-2 flex items-center gap-2 text-xs text-gray-400">
+                      <Calendar className="w-3 h-3" />
+                      <span className="font-mono">{formatDate(o.start_date)} - {formatDate(o.end_date)}</span>
+                    </div>
+                  )}
+                  {o.min_spend > 0 && (
+                    <div className="pt-1 flex items-center gap-2 text-xs text-gray-400">
+                      <Target className="w-3 h-3" /> Min Spend: <span className="font-mono text-gray-200">${o.min_spend}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {combos.map(c => (
+              <div key={c.id} className={`bg-[#121212] border border-white/10 p-5 flex flex-col relative ${c.is_active ? '' : 'opacity-60 grayscale'}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-fraunces text-xl font-medium">{c.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      {c.branch_id ? (
+                        <span className="flex items-center gap-1 font-mono text-xs text-[#800020] bg-[#800020]/10 px-2 py-0.5 rounded-sm"><MapPin className="w-3 h-3" /> {c.branch_name}</span>
+                      ) : (
+                        <span className="flex items-center gap-1 font-mono text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-sm"><Globe className="w-3 h-3" /> Global</span>
+                      )}
+                      {!c.is_active && <span className="text-[10px] uppercase tracking-wider text-red-400 border border-red-400/30 px-1.5 py-0.5 rounded-sm">Inactive</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEditCombo(c)} className="text-gray-400 hover:text-white"><Edit2 className="w-4 h-4" /></button>
+                    {c.is_active && <button onClick={() => handleDelete('combo', c.id)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>}
+                  </div>
+                </div>
+                <div className="space-y-3 flex-grow text-sm text-gray-300">
+                  <p className="line-clamp-2 text-gray-400 text-xs mb-2">{c.description}</p>
+                  <div className="flex items-center gap-2 bg-[#0a0a0a] border border-white/5 p-2 mb-2 w-fit">
+                    <Tag className="w-4 h-4 text-green-400 shrink-0" />
+                    <span className="font-mono text-green-400">${c.bundle_price.toFixed(2)}</span>
+                  </div>
+                  {(c.start_date || c.end_date) && (
+                    <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+                      <Calendar className="w-3 h-3" />
+                      <span className="font-mono">{formatDate(c.start_date)} - {formatDate(c.end_date)}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-white/5">
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Included Services:</p>
+                    <ul className="list-disc list-inside text-xs text-gray-300 space-y-0.5">
+                      {c.services.map(s => <li key={s.service_id}>{s.service_name}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Offer Modal */}
-      {offerModalOpen && (
-        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="panel border-l-[3px] border-l-accent-oxblood p-8 w-full max-w-md">
-            <h3 className="text-xl font-semibold mb-6 text-text-primary">{editingOffer ? "Edit Offer" : "Add Offer"}</h3>
-            <form onSubmit={handleSaveOffer} className="space-y-5">
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Base Service *</label>
-                <select required value={offerServiceId} onChange={e=>setOfferServiceId(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors">
-                  <option value="" disabled>Select a service</option>
-                  {services.map(s => <option key={s.id} value={s.id}>{s.name} (Original: {formatCurrency(s.price)})</option>)}
-                </select>
-              </div>
+      {(isAddOfferOpen || isEditOfferOpen) && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-white/10 p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-l-[3px] border-[#800020] pl-3">
+              <h2 className="text-xl font-fraunces">{isEditOfferOpen ? "Edit Offer" : "Create Offer"}</h2>
+              <button onClick={() => { setIsAddOfferOpen(false); setIsEditOfferOpen(false); }} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            
+            {formError && <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-sm p-3 mb-4 rounded-sm">{formError}</div>}
+
+            <form onSubmit={e => handleOfferSubmit(e, isEditOfferOpen)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Offer Price (₹) *</label>
-                  <input required type="number" step="0.01" min="0.01" value={offerPrice} onChange={e=>setOfferPrice(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Offer Name</label>
+                  <input required value={offerForm.name} onChange={e => setOfferForm({ ...offerForm, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" />
                 </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Branch Scope *</label>
-                  <select required value={offerBranchId} onChange={e=>setOfferBranchId(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors">
-                    <option value="">All Branches</option>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm text-[#800020] font-medium mb-1">Branch Scope</label>
+                  <select value={offerForm.branch_id} onChange={e => setOfferForm({ ...offerForm, branch_id: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]">
+                    <option value="">Global (All Branches)</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Type</label>
+                  <select value={offerForm.discount_type} onChange={e => setOfferForm({ ...offerForm, discount_type: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]">
+                    <option value="reward">Loyalty Reward (Points Only)</option>
+                    <option value="percentage">Percentage Discount</option>
+                    <option value="flat">Flat Amount Discount</option>
+                    <option value="multiplier">Points Multiplier</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Value (%, $, or X)</label>
+                  <input type="number" step="0.01" min="0" value={offerForm.discount_value} onChange={e => setOfferForm({ ...offerForm, discount_value: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" disabled={offerForm.discount_type === 'reward'} />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Points Required to Redeem</label>
+                  <input type="number" min="0" value={offerForm.points_required} onChange={e => setOfferForm({ ...offerForm, points_required: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Minimum Spend ($)</label>
+                  <input type="number" min="0" value={offerForm.min_spend} onChange={e => setOfferForm({ ...offerForm, min_spend: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Start Date</label>
+                  <input type="date" value={offerForm.start_date} onChange={e => setOfferForm({ ...offerForm, start_date: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">End Date</label>
+                  <input type="date" value={offerForm.end_date} onChange={e => setOfferForm({ ...offerForm, end_date: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <textarea rows={2} value={offerForm.description} onChange={e => setOfferForm({ ...offerForm, description: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020] resize-none" />
+                </div>
               </div>
-              {editingOffer && (
-                <div className="flex items-center pt-2">
-                  <input type="checkbox" id="offerIsActive" checked={offerIsActive} onChange={e=>setOfferIsActive(e.target.checked)} className="h-4 w-4 bg-bg-base border-border-hairline-strong accent-accent-oxblood focus:ring-0 cursor-pointer" />
-                  <label htmlFor="offerIsActive" className="ml-2 text-xs font-medium text-text-secondary cursor-pointer">Offer is active</label>
+              
+              {isEditOfferOpen && (
+                <div className="pt-2 flex items-center gap-2">
+                  <input type="checkbox" id="is_active_offer" checked={offerForm.is_active} onChange={e => setOfferForm({ ...offerForm, is_active: e.target.checked })} />
+                  <label htmlFor="is_active_offer" className="text-sm text-gray-300">Offer is Active</label>
                 </div>
               )}
-              <div className="flex justify-end gap-4 pt-4 border-t border-border-hairline">
-                <button type="button" onClick={() => setOfferModalOpen(false)} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
-                <button type="submit" disabled={saving || !offerServiceId} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-oxblood text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
-                  {saving ? "Saving..." : "Save Offer"}
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                <button type="button" onClick={() => { setIsAddOfferOpen(false); setIsEditOfferOpen(false); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={formLoading} className="px-4 py-2 text-sm bg-white text-black hover:bg-gray-200 disabled:opacity-50">
+                  {formLoading ? "Saving..." : "Save"}
                 </button>
               </div>
             </form>
@@ -366,69 +441,81 @@ export default function OffersCombosPage() {
       )}
 
       {/* Combo Modal */}
-      {comboModalOpen && (
-        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="panel border-l-[3px] border-l-accent-oxblood p-8 w-full max-w-lg max-h-[90vh] overflow-auto">
-            <h3 className="text-xl font-semibold mb-6 text-text-primary">{editingCombo ? "Edit Combo" : "Add Combo"}</h3>
-            <form onSubmit={handleSaveCombo} className="space-y-5">
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Combo Name *</label>
-                <input required type="text" value={comboName} onChange={e=>setComboName(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Description</label>
-                <textarea value={comboDescription} onChange={e=>setComboDescription(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" rows={2} />
-              </div>
-              
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Included Services (Select at least 2) *</label>
-                <div className="bg-bg-panel border border-border-hairline-strong p-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-40 overflow-auto">
-                  {services.map(s => (
-                    <label key={s.id} className="flex items-start gap-2 cursor-pointer group">
-                      <input 
-                        type="checkbox" 
-                        checked={comboServices.includes(s.id)}
-                        onChange={() => handleToggleComboService(s.id)}
-                        className="mt-1 h-4 w-4 bg-bg-base border-border-hairline-strong accent-accent-oxblood focus:ring-0 cursor-pointer"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-text-primary group-hover:text-accent-oxblood transition-colors">{s.name}</span>
-                        <span className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">{formatCurrency(s.price)}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
+      {(isAddComboOpen || isEditComboOpen) && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-white/10 p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-l-[3px] border-[#800020] pl-3">
+              <h2 className="text-xl font-fraunces">{isEditComboOpen ? "Edit Combo" : "Create Combo"}</h2>
+              <button onClick={() => { setIsAddComboOpen(false); setIsEditComboOpen(false); }} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            
+            {formError && <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-sm p-3 mb-4 rounded-sm">{formError}</div>}
 
+            <form onSubmit={e => handleComboSubmit(e, isEditComboOpen)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Bundle Price (₹) *</label>
-                  <input required type="number" step="0.01" min="0.01" value={comboPrice} onChange={e=>setComboPrice(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors" />
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Combo Name</label>
+                  <input required value={comboForm.name} onChange={e => setComboForm({ ...comboForm, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" />
                 </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Branch Scope *</label>
-                  <select required value={comboBranchId} onChange={e=>setComboBranchId(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none transition-colors">
-                    <option value="">All Branches</option>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm text-[#800020] font-medium mb-1">Branch Scope</label>
+                  <select value={comboForm.branch_id} onChange={e => setComboForm({ ...comboForm, branch_id: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]">
+                    <option value="">Global (All Branches)</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Bundle Price ($)</label>
+                  <input required type="number" step="0.01" min="0" value={comboForm.bundle_price} onChange={e => setComboForm({ ...comboForm, bundle_price: Number(e.target.value) })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Start Date</label>
+                  <input type="date" value={comboForm.start_date} onChange={e => setComboForm({ ...comboForm, start_date: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">End Date</label>
+                  <input type="date" value={comboForm.end_date} onChange={e => setComboForm({ ...comboForm, end_date: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <textarea rows={2} value={comboForm.description} onChange={e => setComboForm({ ...comboForm, description: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020] resize-none" />
+                </div>
+
+                <div className="col-span-2 mt-2">
+                  <label className="block text-sm text-[#800020] font-medium mb-2">Select Services (Min 2)</label>
+                  <div className="max-h-40 overflow-y-auto bg-[#0a0a0a] border border-white/10 p-2 space-y-1">
+                    {services.filter(s => !comboForm.branch_id || !s.branch_id || s.branch_id === comboForm.branch_id).map(s => (
+                      <label key={s.id} className="flex items-center gap-2 p-1 hover:bg-white/5 cursor-pointer">
+                        <input type="checkbox" checked={comboForm.service_ids.includes(s.id)} onChange={() => toggleComboService(s.id)} />
+                        <span className="text-sm">{s.name} {s.branch_id ? '(Branch)' : '(Global)'}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
-              {editingCombo && (
-                <div className="flex items-center pt-2">
-                  <input type="checkbox" id="comboIsActive" checked={comboIsActive} onChange={e=>setComboIsActive(e.target.checked)} className="h-4 w-4 bg-bg-base border-border-hairline-strong accent-accent-oxblood focus:ring-0 cursor-pointer" />
-                  <label htmlFor="comboIsActive" className="ml-2 text-xs font-medium text-text-secondary cursor-pointer">Combo is active</label>
+              
+              {isEditComboOpen && (
+                <div className="pt-2 flex items-center gap-2">
+                  <input type="checkbox" id="is_active_combo" checked={comboForm.is_active} onChange={e => setComboForm({ ...comboForm, is_active: e.target.checked })} />
+                  <label htmlFor="is_active_combo" className="text-sm text-gray-300">Combo is Active</label>
                 </div>
               )}
-              <div className="flex justify-end gap-4 pt-4 border-t border-border-hairline">
-                <button type="button" onClick={() => setComboModalOpen(false)} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
-                <button type="submit" disabled={saving || comboServices.length < 2} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-oxblood text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
-                  {saving ? "Saving..." : "Save Combo"}
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                <button type="button" onClick={() => { setIsAddComboOpen(false); setIsEditComboOpen(false); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={formLoading} className="px-4 py-2 text-sm bg-white text-black hover:bg-gray-200 disabled:opacity-50">
+                  {formLoading ? "Saving..." : "Save"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

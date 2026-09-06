@@ -21,7 +21,7 @@ async function check() {
 
     const tables = ['transactions', 'users', 'expenses', 'redemptions', 'schedule_requests', 'profile_change_requests', 'customers', 'offers'];
     let hasData = false;
-    let details = [];
+    const details = [];
 
     for (const table of tables) {
       try {

@@ -11,8 +11,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const branch_id = searchParams.get("branch_id");
+
+  if (!branch_id) {
+    return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
+  }
+
   try {
-    const res = await db.execute(`
+    const res = await db.execute({
+      sql: `
       SELECT 
         so.*, 
         s.name as service_name,
@@ -21,8 +29,11 @@ export async function GET(request: Request) {
       FROM service_offers so
       JOIN services s ON so.service_id = s.id
       LEFT JOIN branches b ON so.branch_id = b.id
+      WHERE so.branch_id = ?
       ORDER BY so.created_at DESC
-    `);
+    `,
+      args: [branch_id]
+    });
     
     return NextResponse.json({ serviceOffers: res.rows });
   } catch (error: any) {
@@ -42,20 +53,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     let { service_id, offer_price, branch_id, is_active } = body;
     
-    if (branch_id === "") branch_id = null;
     offer_price = Number(offer_price);
 
-    if (!service_id || isNaN(offer_price) || offer_price <= 0) {
-      return NextResponse.json({ error: "Valid service ID and offer price > 0 are required" }, { status: 400 });
+    if (!service_id || isNaN(offer_price) || offer_price <= 0 || !branch_id) {
+      return NextResponse.json({ error: "Valid service ID, branch_id, and offer price > 0 are required" }, { status: 400 });
     }
 
     const serviceRes = await db.execute({
-      sql: "SELECT price FROM services WHERE id = ?",
+      sql: "SELECT price, branch_id FROM services WHERE id = ?",
       args: [service_id]
     });
 
     if (serviceRes.rows.length === 0) {
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
+    }
+
+    if (serviceRes.rows[0].branch_id !== branch_id) {
+      return NextResponse.json({ error: "Service does not belong to the specified branch" }, { status: 400 });
     }
 
     const originalPrice = Number(serviceRes.rows[0].price);

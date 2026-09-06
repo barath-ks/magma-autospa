@@ -15,7 +15,7 @@ export async function POST(
   }
 
   const role = (session.user as any).role;
-  if (role !== "manager" && role !== "admin") {
+  if (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,7 +24,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    let { vehicle_number, vehicle_type, vehicle_model } = body;
+    let { vehicle_number, vehicle_type, vehicle_model, vehicle_make } = body;
 
     if (!vehicle_number || !vehicle_type) {
       return NextResponse.json({ error: "Vehicle number and type are required" }, { status: 400 });
@@ -46,12 +46,23 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden: Customer belongs to a different branch" }, { status: 403 });
     }
 
+    // Check plate uniqueness
+    const existingVehicle = await db.execute({
+      sql: "SELECT id FROM vehicles WHERE vehicle_number = ?",
+      args: [vehicle_number]
+    });
+    if (existingVehicle.rows.length > 0) {
+      return NextResponse.json({ 
+        error: `Vehicle plate ${vehicle_number} is already registered in the system.` 
+      }, { status: 409 });
+    }
+
     const vehicleId = uuidv4();
     
     await db.execute({
-      sql: `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_model)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [vehicleId, customerId, vehicle_number, vehicle_type, vehicle_model || null],
+      sql: `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_model, vehicle_make)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [vehicleId, customerId, vehicle_number, vehicle_type, vehicle_model || null, vehicle_make || null],
     });
 
     return NextResponse.json({ 
@@ -59,7 +70,8 @@ export async function POST(
       customer_id: customerId, 
       vehicle_number, 
       vehicle_type, 
-      vehicle_model 
+      vehicle_model,
+      vehicle_make: vehicle_make || null
     });
 
   } catch (error: any) {

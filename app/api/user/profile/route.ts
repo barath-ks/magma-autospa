@@ -55,10 +55,30 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { phone, email } = body;
 
-    // Direct update, no approval needed for phone/email
+    if (!email || typeof email !== "string" || !email.trim()) {
+      return NextResponse.json({ error: "Email address is required" }, { status: 400 });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
+    }
+
+    // Check email uniqueness against other users
+    const existing = await db.execute({
+      sql: "SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1",
+      args: [cleanEmail, userId],
+    });
+
+    if (existing.rows.length > 0) {
+      return NextResponse.json({ error: "This email address is already in use by another account" }, { status: 400 });
+    }
+
+    // Direct update
     await db.execute({
       sql: `UPDATE users SET phone = ?, email = ? WHERE id = ?`,
-      args: [phone || null, email || null, userId],
+      args: [phone ? String(phone).trim() : null, cleanEmail, userId],
     });
 
     return NextResponse.json({ success: true });

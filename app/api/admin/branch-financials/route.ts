@@ -14,9 +14,17 @@ export async function GET(request: Request) {
   const range = searchParams.get("range") || "month";
   const branchId = searchParams.get("branch_id");
 
-  let dateModifier = "'-1 month'";
-  if (range === "week") dateModifier = "'-7 days'";
-  if (range === "year") dateModifier = "'-1 year'";
+  let dateFilterTransactions = "";
+  let dateFilterExpenses = "";
+
+  if (range !== "all") {
+    let dateModifier = "'-1 month'";
+    if (range === "week") dateModifier = "'-7 days'";
+    if (range === "year") dateModifier = "'-1 year'";
+    
+    dateFilterTransactions = `AND t.created_at >= datetime('now', ${dateModifier})`;
+    dateFilterExpenses = `AND e.created_at >= datetime('now', ${dateModifier})`;
+  }
 
   try {
     let sql = `
@@ -27,11 +35,11 @@ export async function GET(request: Request) {
         b.is_active as is_active,
         COALESCE(SUM(t.total_amount), 0) as revenue,
         COALESCE(
-          (SELECT SUM(amount) FROM branch_expenses e WHERE e.branch_id = b.id AND e.created_at >= datetime('now', ${dateModifier})),
+          (SELECT SUM(amount) FROM branch_expenses e WHERE e.branch_id = b.id ${dateFilterExpenses}),
           0
         ) as expense
       FROM branches b
-      LEFT JOIN transactions t ON t.branch_id = b.id AND t.created_at >= datetime('now', ${dateModifier})
+      LEFT JOIN transactions t ON t.branch_id = b.id ${dateFilterTransactions}
     `;
     
     const args: any[] = [];

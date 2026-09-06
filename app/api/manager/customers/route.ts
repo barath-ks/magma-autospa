@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import crypto from "crypto";
+import { customerSchema } from "@/lib/validations";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const role = (session.user as any).role;
-  if (role !== "staff" && role !== "manager" && role !== "admin") {
+  if (role !== "branch" && role !== "staff" && role !== "manager" && role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const role = (session.user as any).role;
-  if (role !== "staff" && role !== "manager") {
+  if (role !== "branch" && role !== "staff" && role !== "manager" && role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -62,30 +63,58 @@ export async function POST(request: Request) {
   
   try {
     const body = await request.json();
-    const { name, phone, email, vehicle_number, vehicle_type, vehicle_model } = body;
+    const { name, phone, email, vehicle_number, vehicle_type, vehicle_model, vehicle_make } = body;
 
-    if (!name || !phone) {
-      return NextResponse.json({ error: "Name and Phone are required" }, { status: 400 });
+    const validationResult = customerSchema.safeParse({ name, phone, email });
+    if (!validationResult.success) {
+      const msg = validationResult.error.issues?.[0]?.message || "Invalid customer details";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+
+    const cleanPhone = phone.trim();
+
+    // Pre-flight check for phone uniqueness
+    const existingPhone = await db.execute({
+      sql: "SELECT id, name FROM customers WHERE phone = ?",
+      args: [cleanPhone]
+    });
+    if (existingPhone.rows.length > 0) {
+      const existingName = existingPhone.rows[0].name;
+      return NextResponse.json({ 
+        error: `A customer with phone number ${cleanPhone} is already registered (${existingName}).` 
+      }, { status: 409 });
     }
     
     if (!vehicle_number || !vehicle_type) {
       return NextResponse.json({ error: "Initial vehicle number and type are required" }, { status: 400 });
     }
 
+    const vNum = vehicle_number.toUpperCase().trim();
+
+    // Pre-flight check for vehicle number uniqueness
+    const existingVehicle = await db.execute({
+      sql: "SELECT id FROM vehicles WHERE vehicle_number = ?",
+      args: [vNum]
+    });
+    if (existingVehicle.rows.length > 0) {
+      return NextResponse.json({ 
+        error: `Vehicle plate ${vNum} is already registered in the system.` 
+      }, { status: 409 });
+    }
+
     const id = crypto.randomUUID();
     const vehicleId = crypto.randomUUID();
-    const vNum = vehicle_number.toUpperCase().trim();
     
     const statements = [
       {
         sql: `INSERT INTO customers (id, name, phone, email, branch_id)
               VALUES (?, ?, ?, ?, ?)`,
-        args: [id, name, phone, email || null, branchId]
+        args: [id, name.trim(), cleanPhone, email ? email.trim() : null, branchId]
       },
       {
-        sql: `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_model)
-              VALUES (?, ?, ?, ?, ?)`,
-        args: [vehicleId, id, vNum, vehicle_type, vehicle_model || null]
+        sql: `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_model, vehicle_make)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [vehicleId, id, vNum, vehicle_type, vehicle_model || null, vehicle_make || null]
       }
     ];
 

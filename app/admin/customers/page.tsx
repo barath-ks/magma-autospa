@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Contact, Search, ChevronLeft, ChevronRight, X, Clock, MapPin, DollarSign, Wrench, User } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { formatCurrency } from "@/lib/format";
+import { PaymentBadge } from "@/components/PaymentBadge";
 
 export default function AdminCustomersPage() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -238,9 +239,15 @@ export default function AdminCustomersPage() {
                             </div>
                           ))}
                         </div>
-                        <div className="flex justify-between items-end mt-4 pt-3 border-t border-border-hairline border-dashed">
-                          <div className="text-[10px] text-text-secondary flex items-center gap-1"><User size={10} /> {tx.staff_name || 'Unknown'}</div>
-                          <div className="text-sm font-mono font-bold text-accent-oxblood flex items-center gap-1">{formatCurrency(tx.total_amount)}</div>
+                        <div className="flex justify-between items-center mt-4 pt-3 border-t border-border-hairline border-dashed">
+                          <div className="text-[10px] text-text-secondary flex items-center gap-1.5">
+                            <User size={10} /> 
+                            <span>{tx.staff_name || 'Unknown'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <PaymentBadge method={tx.payment_method} size="sm" />
+                            <span className="text-sm font-mono font-bold text-accent-oxblood">{formatCurrency(tx.total_amount)}</span>
+                          </div>
                         </div>
                       </div>
                     </div>

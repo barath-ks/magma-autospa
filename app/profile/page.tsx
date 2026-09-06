@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
-import { Lock, User as UserIcon, Clock, XCircle, AlertCircle, Phone, Mail, Save } from "lucide-react";
+import Link from "next/link";
+import { Lock, User as UserIcon, Clock, XCircle, AlertCircle, Phone, Mail, Save, Eye, EyeOff } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import PasswordStrengthIndicator from "@/components/PasswordStrengthIndicator";
 
@@ -17,11 +18,15 @@ export default function ProfilePage() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
+  const [profileContactError, setProfileContactError] = useState("");
 
   // Password State
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [pwdError, setPwdError] = useState("");
   const [pwdMsg, setPwdMsg] = useState("");
   const [pwdLoading, setPwdLoading] = useState(false);
@@ -70,18 +75,24 @@ export default function ProfilePage() {
     e.preventDefault();
     setProfileSaving(true);
     setProfileMsg("");
+    setProfileContactError("");
     try {
       const res = await fetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, email })
       });
+      const data = await res.json();
       if (res.ok) {
+        setProfile((prev: any) => prev ? { ...prev, phone, email } : prev);
         setProfileMsg("Contact info saved.");
         setTimeout(() => setProfileMsg(""), 3000);
+      } else {
+        setProfileContactError(data.error || "Failed to update contact info");
       }
     } catch (e) {
       console.error(e);
+      setProfileContactError("Failed to connect to the server");
     }
     setProfileSaving(false);
   };
@@ -188,29 +199,106 @@ export default function ProfilePage() {
                     <div className="text-sm text-text-primary">{profile?.branch_name}</div>
                   </div>
                 </div>
+
+                <div className="pt-4 border-t border-border-hairline space-y-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary mb-1">Registered Phone</div>
+                    <div className="font-mono text-sm text-text-primary">
+                      {profile?.phone ? (
+                        profile.phone
+                      ) : (
+                        <span className="italic text-text-secondary/60 text-xs">No phone added</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary mb-1">Registered Email</div>
+                    <div className="font-mono text-sm text-text-primary">
+                      {profile?.email ? (
+                        profile.email
+                      ) : (
+                        <span className="italic text-text-secondary/60 text-xs">No email added</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Editable Contact Info */}
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-widest text-text-primary mb-6 flex items-center gap-2">
-                Contact Information
-              </h2>
-              {profileMsg && <div className="text-[#4ade80] bg-[#163a24] border border-[#1d5230] text-[10px] uppercase tracking-widest font-bold mb-4 p-3 animate-in fade-in">{profileMsg}</div>}
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-text-primary flex items-center gap-2">
+                  Contact Information
+                </h2>
+                <div className="flex items-center gap-2">
+                  {profile?.phone ? (
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-[#4ade80] bg-[#163a24] border border-[#1d5230] px-2 py-0.5 rounded">
+                      Verified Phone
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-text-secondary bg-bg-base border border-border-hairline px-2 py-0.5 rounded">
+                      No Phone Set
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {profileMsg && (
+                <div className="text-[#4ade80] bg-[#163a24] border border-[#1d5230] text-[10px] uppercase tracking-widest font-bold mb-4 p-3 animate-in fade-in">
+                  {profileMsg}
+                </div>
+              )}
+
+              {profileContactError && (
+                <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-[10px] uppercase tracking-widest font-bold mb-4 p-3 animate-in fade-in">
+                  {profileContactError}
+                </div>
+              )}
+
               <form onSubmit={handleProfileSave} className="space-y-5">
                 <div>
-                  <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">
-                    <Phone size={12} className={`text-${accentClass}`} /> Phone Number
-                  </label>
-                  <input type="text" value={phone} onChange={e=>setPhone(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} placeholder="(Optional, but required for SMS Reset)" />
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary">
+                      <Phone size={12} className={`text-${accentClass}`} /> Phone Number
+                    </label>
+                    <span className="text-[10px] font-mono text-text-secondary">
+                      {profile?.phone ? profile.phone : <span className="italic text-text-secondary/60">No phone number added</span>}
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors placeholder:italic placeholder:text-text-secondary/40`}
+                    placeholder={profile?.phone || "No phone number added"}
+                  />
                 </div>
+
                 <div>
-                  <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">
-                    <Mail size={12} className={`text-${accentClass}`} /> Email Address
-                  </label>
-                  <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} placeholder="(Optional)" />
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary">
+                      <Mail size={12} className={`text-${accentClass}`} /> Email Address <span className="text-[#ff6b6b]">*</span>
+                    </label>
+                    <span className="text-[10px] font-mono text-text-secondary">
+                      {profile?.email ? profile.email : <span className="italic text-text-secondary/60">No email added</span>}
+                    </span>
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors placeholder:italic placeholder:text-text-secondary/40`}
+                    placeholder={profile?.email || "e.g. user@magma-autospa.com"}
+                  />
                 </div>
-                <button type="submit" disabled={profileSaving} className={`flex items-center gap-2 justify-center w-full font-bold text-xs uppercase tracking-widest bg-bg-panel-elevated border border-border-hairline text-text-primary hover:text-white hover:bg-${accentClass} transition-colors py-3`}>
+
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className={`flex items-center gap-2 justify-center w-full font-bold text-xs uppercase tracking-widest bg-bg-panel-elevated border border-border-hairline text-text-primary hover:text-white hover:bg-${accentClass} transition-colors py-3`}
+                >
                   {profileSaving ? "Saving..." : <><Save size={14} /> Save Contact Info</>}
                 </button>
               </form>
@@ -231,17 +319,55 @@ export default function ProfilePage() {
             
             <form onSubmit={handlePasswordSubmit} className="space-y-5">
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Current Password</label>
-                <input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary">Current Password</label>
+                  <Link 
+                    href={`/auth/forgot-password?role=${role}`} 
+                    className={`text-[10px] font-bold uppercase tracking-wider text-text-secondary hover:text-${accentClass} transition-colors`}
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 pr-10 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                    aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                  >
+                    {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">New Password</label>
-                <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                <div className="relative">
+                  <input type={showNewPassword ? "text" : "password"} value={newPassword} onChange={e=>setNewPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 pr-10 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                    aria-label={showNewPassword ? "Hide password" : "Show password"}
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <PasswordStrengthIndicator password={newPassword} />
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Confirm New Password</label>
-                <input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                <div className="relative">
+                  <input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className={`w-full bg-bg-base border border-border-hairline-strong p-3 pr-10 text-text-primary font-mono text-sm focus:border-${accentClass} focus:outline-none transition-colors`} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
               <button type="submit" disabled={pwdLoading || !!pwdMsg} className={`w-full font-bold text-xs uppercase tracking-widest bg-${accentClass} text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors py-3 mt-4`}>
                 {pwdLoading ? "Updating..." : "Update Password"}

@@ -1,352 +1,623 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Building, Plus, KeyRound, Edit2, Check, X } from "lucide-react";
-import Breadcrumbs from "@/components/Breadcrumbs";
+
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { formatCurrency } from "@/lib/format";
+import { Plus, Edit2, Phone, MapPin, Hash, Trash2, ShieldCheck, X, Eye, EyeOff, Copy, Check, KeyRound, ExternalLink, RefreshCw } from "lucide-react";
 
-export default function BranchesPage() {
-  const [range, setRange] = useState("month");
-  const [branches, setBranches] = useState<any[]>([]);
+interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  branch_code?: string;
+  email?: string;
+  display_password?: string;
+  must_change_password?: number | boolean;
+  location: string;
+  phone: string;
+  is_active: number;
+  active_staff_count: number;
+  manager_id: string | null;
+  manager_name: string | null;
+}
+
+interface Manager {
+  id: string;
+  name: string;
+  branch_id: string | null;
+}
+
+export default function AdminBranchesPage() {
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [managers, setManagers] = useState<Manager[]>([]);
   const [loading, setLoading] = useState(true);
-  const [reactivating, setReactivating] = useState<string | null>(null);
-  
-  // Add Branch State
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newLocation, setNewLocation] = useState("");
-  const [managerName, setManagerName] = useState("");
-  const [managerPhone, setManagerPhone] = useState("");
-  const [managerEmail, setManagerEmail] = useState("");
-  const [submittingAdd, setSubmittingAdd] = useState(false);
-  const [addError, setAddError] = useState("");
-  const [createdManager, setCreatedManager] = useState<any>(null);
 
-  // Edit Branch State
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editLocation, setEditLocation] = useState("");
-  const [editError, setEditError] = useState("");
-  const [submittingEdit, setSubmittingEdit] = useState(false);
+  // Modal states
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [createdBranchCreds, setCreatedBranchCreds] = useState<Branch | null>(null);
+
+  // Credential view & copy states
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+  const [copiedMap, setCopiedMap] = useState<Record<string, boolean>>({});
+  
+  // Form states
+  const [formData, setFormData] = useState({ 
+    id: "", 
+    name: "", 
+    code: "", 
+    email: "",
+    location: "", 
+    phone: "", 
+    password: "",
+    must_change_password: true,
+    is_active: true, 
+    manager_id: "" 
+  });
+  const [formError, setFormError] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
-    fetchBranches();
-  }, [range]);
+    fetchData();
+  }, []);
 
-  const fetchBranches = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      // Reusing the financials API since it has all branch info + metrics
-      const res = await fetch(`/api/admin/branch-financials?range=${range}`);
-      const data = await res.json();
-      if (data.financials) setBranches(data.financials);
+      const [resBranches, resUsers] = await Promise.all([
+        fetch("/api/admin/branches").then((res) => res.json()),
+        fetch("/api/admin/users").then((res) => res.json()),
+      ]);
+
+      if (resBranches.branches) {
+        setBranches(resBranches.branches);
+      }
+      
+      if (resUsers.users) {
+        const mgrs = resUsers.users.filter((u: any) => u.role === "manager");
+        setManagers(mgrs);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("Error fetching data", e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const handleAddBranch = async (e: React.FormEvent) => {
+  const copyToClipboard = (text: string, key: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedMap(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setCopiedMap(prev => ({ ...prev, [key]: false }));
+    }, 2000);
+  };
+
+  const togglePasswordVisibility = (branchId: string) => {
+    setShowPasswordMap(prev => ({ ...prev, [branchId]: !prev[branchId] }));
+  };
+
+  const generateRandomPassword = () => {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    const generated = `Magma@${randomDigits}`;
+    setFormData(prev => ({ ...prev, password: generated }));
+  };
+
+  const resetForm = () => {
+    setFormData({ 
+      id: "", 
+      name: "", 
+      code: "", 
+      email: "",
+      location: "", 
+      phone: "", 
+      password: "",
+      must_change_password: true,
+      is_active: true, 
+      manager_id: "" 
+    });
+    setFormError("");
+  };
+
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingAdd(true);
-    setAddError("");
+    setFormError("");
+    setFormLoading(true);
+
     try {
       const res = await fetch("/api/admin/branches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName, location: newLocation, manager_name: managerName, manager_phone: managerPhone, manager_email: managerEmail })
+        body: JSON.stringify({
+          name: formData.name,
+          code: formData.code,
+          email: formData.email,
+          location: formData.location,
+          phone: formData.phone,
+          password: formData.password,
+          must_change_password: formData.must_change_password,
+        }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setCreatedManager(data.manager);
-        setShowAddForm(false);
-        setNewName(""); setNewLocation(""); setManagerName(""); setManagerPhone(""); setManagerEmail("");
-        fetchBranches();
+      if (!res.ok) {
+        setFormError(data.error || "Failed to create branch");
       } else {
-        setAddError(data.error || "Failed to create branch");
+        setIsAddOpen(false);
+        resetForm();
+        setCreatedBranchCreds(data.branch);
+        fetchData(); // Refresh list
       }
-    } catch (err) {
-      setAddError("An error occurred");
+    } catch (err: any) {
+      setFormError("Network error");
+    } finally {
+      setFormLoading(false);
     }
-    setSubmittingAdd(false);
   };
 
-  const startEdit = (branch: any, e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent Link click
-    setEditingId(branch.branch_id);
-    setEditName(branch.branch_name);
-    setEditLocation(branch.location);
-    setEditError("");
-  };
-
-  const handleEditSubmit = async (e: React.FormEvent, branchId: string) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingEdit(true);
-    setEditError("");
+    setFormError("");
+    setFormLoading(true);
+
     try {
-      const res = await fetch(`/api/admin/branches/${branchId}`, {
+      const payload: any = {
+        name: formData.name,
+        code: formData.code,
+        email: formData.email || undefined,
+        location: formData.location,
+        phone: formData.phone,
+        is_active: formData.is_active,
+        manager_id: formData.manager_id || null,
+        must_change_password: formData.must_change_password,
+      };
+
+      if (formData.password && formData.password.trim() !== "") {
+        payload.password = formData.password.trim();
+      }
+
+      const res = await fetch(`/api/admin/branches/${formData.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName, location: editLocation })
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (res.ok) {
-        setEditingId(null);
-        fetchBranches();
+      if (!res.ok) {
+        setFormError(data.error || "Failed to update branch");
       } else {
-        setEditError(data.error || "Failed to update branch");
+        setIsEditOpen(false);
+        resetForm();
+        fetchData(); // Refresh list
       }
-    } catch (err) {
-      setEditError("An error occurred");
+    } catch (err: any) {
+      setFormError("Network error");
+    } finally {
+      setFormLoading(false);
     }
-    setSubmittingEdit(false);
   };
 
-  const handleReactivate = async (branchId: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    setReactivating(branchId);
+  const openEdit = (branch: Branch) => {
+    setFormData({
+      id: branch.id,
+      name: branch.name,
+      code: branch.code || "",
+      email: branch.email || "",
+      location: branch.location,
+      phone: branch.phone || "",
+      password: "",
+      must_change_password: Boolean(branch.must_change_password),
+      is_active: branch.is_active === 1,
+      manager_id: branch.manager_id || "",
+    });
+    setIsEditOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to deactivate this branch?")) return;
     try {
-      const res = await fetch(`/api/admin/branches/${branchId}/reactivate`, { method: "POST" });
-      if (res.ok) {
-        fetchBranches();
-      } else {
-        alert("Failed to reactivate branch");
-      }
-    } catch (err) {
-      alert("Error reactivating branch");
+      const res = await fetch(`/api/admin/branches/${id}`, { method: "DELETE" });
+      if (res.ok) fetchData();
+    } catch (e) {
+      console.error(e);
     }
-    setReactivating(null);
   };
-
-  const activeBranches = branches.filter(b => b.is_active !== false);
-  const deletedBranches = branches.filter(b => b.is_active === false);
 
   return (
-    <main className="flex-1 p-8 lg:p-12 overflow-auto flex flex-col h-full">
-      <div className="w-full max-w-6xl mx-auto mb-8 flex justify-between items-end">
-        <div>
-          <Breadcrumbs items={[{ label: "System", href: "/admin" }, { label: "Branches" }]} accentClass="hover:text-accent-oxblood" />
-          <h1 className="text-3xl font-semibold text-text-primary mt-2">Branches</h1>
-          <p className="text-text-secondary mt-1 text-sm uppercase tracking-wider">Manage locations and monitor performance</p>
-        </div>
-        
-        <div className="flex gap-4 items-center">
-          <div className="flex bg-bg-panel border border-border-hairline p-1">
-            {[
-              { id: "week", label: "This Week" },
-              { id: "month", label: "This Month" },
-              { id: "year", label: "This Year" }
-            ].map(r => (
-              <button
-                key={r.id}
-                onClick={() => setRange(r.id)}
-                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
-                  range === r.id 
-                    ? "bg-accent-oxblood text-white" 
-                    : "text-text-secondary hover:text-text-primary hover:bg-bg-panel-elevated"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-8 font-inter">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-center mb-8 border-l-[3px] border-[#800020] pl-4">
+          <div>
+            <h1 className="text-3xl font-fraunces font-semibold tracking-tight">Branch Management</h1>
+            <p className="text-gray-400 mt-1">Manage operations, addresses, and assign branch managers.</p>
           </div>
-
-          <button 
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-accent-oxblood text-white font-bold uppercase tracking-widest text-xs px-6 py-3 flex items-center gap-2 hover:opacity-90 transition-opacity"
+          <button
+            onClick={() => { resetForm(); setIsAddOpen(true); }}
+            className="flex items-center gap-2 bg-[#121212] border border-white/10 hover:border-white/30 text-white px-4 py-2 text-sm transition-colors"
           >
-            <Plus size={16} /> Add Branch
+            <Plus className="w-4 h-4" /> Add Branch
           </button>
         </div>
+
+        {loading ? (
+          <div className="text-center py-20 text-gray-500 font-mono text-sm">Loading branches...</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {branches.map((b) => {
+              const isPasswordVisible = !!showPasswordMap[b.id];
+              const isPasswordCopied = !!copiedMap[`pwd-${b.id}`];
+              const isEmailCopied = !!copiedMap[`email-${b.id}`];
+              const isCodeCopied = !!copiedMap[`code-${b.id}`];
+
+              return (
+                <div key={b.id} className={`bg-[#121212] border border-white/10 p-5 flex flex-col justify-between relative ${b.is_active ? '' : 'opacity-60 grayscale'}`}>
+                  <div>
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <Link href={`/admin/branches/${b.id}`} className="font-fraunces text-xl font-medium text-white hover:text-[#B87333] transition-colors flex items-center gap-1.5 group">
+                          {b.name}
+                          <ExternalLink size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-[#B87333]" />
+                        </Link>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <button
+                            onClick={() => copyToClipboard(b.branch_code || b.code, `code-${b.id}`)}
+                            title="Click to copy branch code"
+                            className="font-mono text-[11px] text-gray-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-sm hover:border-white/30 flex items-center gap-1 transition-colors"
+                          >
+                            <span>{b.branch_code || b.code}</span>
+                            {isCodeCopied ? <Check size={10} className="text-green-400" /> : <Copy size={10} className="text-gray-500" />}
+                          </button>
+
+                          {b.must_change_password ? (
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded-sm">
+                              First Login Pending
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-sm">
+                              Password Secured
+                            </span>
+                          )}
+
+                          {!b.is_active && (
+                            <span className="text-[10px] uppercase tracking-wider text-red-400 border border-red-400/30 px-1.5 py-0.5 rounded-sm">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button onClick={() => openEdit(b)} className="text-gray-400 hover:text-white transition-colors p-1" title="Edit Branch">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {b.is_active ? (
+                          <button onClick={() => handleDelete(b.id)} className="text-gray-500 hover:text-red-400 transition-colors p-1" title="Deactivate Branch">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Operational Details */}
+                    <div className="space-y-2.5 text-xs text-gray-300 mb-4">
+                      <div className="flex items-start gap-2.5">
+                        <MapPin className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" />
+                        <span className="line-clamp-1">{b.location}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <Phone className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                        <span className="font-mono">{b.phone || "No phone"}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-[#800020] shrink-0" />
+                        <span>
+                          Manager: {b.manager_name ? <span className="text-white font-medium">{b.manager_name}</span> : <span className="text-gray-500 italic">Unassigned</span>}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Floor Terminal Credentials Box */}
+                    <div className="bg-[#0c0c0c] border border-white/10 p-3 mb-4 rounded-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] uppercase tracking-widest font-mono text-[#B87333] font-bold flex items-center gap-1.5">
+                          <KeyRound size={11} /> Floor Credentials
+                        </span>
+                        <span className="text-[10px] font-mono text-gray-500">/branch/login</span>
+                      </div>
+
+                      {/* Login Email */}
+                      <div className="flex items-center justify-between text-xs py-1 border-b border-white/5">
+                        <span className="text-gray-500">Login ID / Email:</span>
+                        <div className="flex items-center gap-1.5 font-mono text-gray-200">
+                          <span className="max-w-[140px] truncate" title={b.email || b.code}>
+                            {b.email || b.code}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(b.email || b.code, `email-${b.id}`)}
+                            title="Copy email"
+                            className="text-gray-500 hover:text-white transition-colors"
+                          >
+                            {isEmailCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Active Password */}
+                      <div className="flex items-center justify-between text-xs py-1 mt-0.5">
+                        <span className="text-gray-500">Active Password:</span>
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <span className="text-amber-400 tracking-wider">
+                            {isPasswordVisible ? (b.display_password || "••••••••") : "••••••••"}
+                          </span>
+                          <button
+                            onClick={() => togglePasswordVisibility(b.id)}
+                            title={isPasswordVisible ? "Hide password" : "Show password"}
+                            className="text-gray-500 hover:text-white transition-colors"
+                          >
+                            {isPasswordVisible ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                          {b.display_password && (
+                            <button
+                              onClick={() => copyToClipboard(b.display_password!, `pwd-${b.id}`)}
+                              title="Copy password"
+                              className="text-gray-500 hover:text-white transition-colors"
+                            >
+                              {isPasswordCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Footer */}
+                  <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs">
+                    <span className="text-gray-500">Floor Staff: <span className="font-mono text-white">{b.active_staff_count}</span></span>
+                    <Link href={`/admin/branches/${b.id}`} className="text-[#B87333] hover:underline font-mono text-[11px] uppercase tracking-wider flex items-center gap-1">
+                      Manage Branch &rarr;
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div className="w-full max-w-6xl mx-auto">
-        {showAddForm && (
-          <div className="panel p-8 mb-8 border-l-[3px] border-l-accent-oxblood animate-in slide-in-from-top-4">
-            <h2 className="text-lg font-semibold text-text-primary mb-6">Create New Branch & Manager</h2>
-            {addError && <div className="text-[#ff6b6b] bg-[#3a1616] p-3 text-xs font-bold uppercase tracking-widest mb-4">{addError}</div>}
+      {/* Add Branch Modal */}
+      {isAddOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-white/10 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-l-[3px] border-[#B87333] pl-3">
+              <div>
+                <h2 className="text-xl font-fraunces text-white">Create New Branch</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Provision a new facility profile and operational credentials.</p>
+              </div>
+              <button onClick={() => setIsAddOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
             
-            <form onSubmit={handleAddBranch} className="space-y-6">
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-text-secondary border-b border-border-hairline pb-2">Branch Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Branch Name *</label>
-                    <input type="text" required value={newName} onChange={e=>setNewName(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Location/Address *</label>
-                    <input type="text" required value={newLocation} onChange={e=>setNewLocation(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                  </div>
+            {formError && <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-xs p-3 mb-4 rounded-sm font-mono">{formError}</div>}
+
+            <form onSubmit={handleAddSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Branch Name *</label>
+                <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#B87333]" placeholder="e.g. Westside Facility" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Branch Code / Slug *</label>
+                <input required value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#B87333]" placeholder="e.g. MAG-BRANCH-02" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Floor Login Email</label>
+                <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#B87333]" placeholder="Optional (defaults to code@magma-autospa.com)" />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">Temporary Password</label>
+                  <button
+                    type="button"
+                    onClick={generateRandomPassword}
+                    className="text-[10px] font-mono text-[#B87333] hover:underline flex items-center gap-1"
+                  >
+                    <RefreshCw size={10} /> Auto-Generate
+                  </button>
                 </div>
+                <input 
+                  type="text" 
+                  value={formData.password} 
+                  onChange={e => setFormData({ ...formData, password: e.target.value })} 
+                  className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono text-amber-400 focus:outline-none focus:border-[#B87333]" 
+                  placeholder="Optional (randomly generated if empty)" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Address / Location *</label>
+                <input required value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#B87333]" placeholder="e.g. 789 Silicon Way" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Contact Phone *</label>
+                <input required value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#B87333]" placeholder="e.g. +1 555-0199" />
               </div>
 
-              <div className="space-y-4 pt-2">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-text-secondary border-b border-border-hairline pb-2">Initial Manager Account</h3>
-                <p className="text-[10px] uppercase text-text-secondary tracking-widest">A branch requires at least one manager. Login credentials will be generated automatically.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Manager Full Name *</label>
-                    <input type="text" required value={managerName} onChange={e=>setManagerName(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Phone (Optional)</label>
-                    <input type="text" value={managerPhone} onChange={e=>setManagerPhone(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-2">Email (Optional)</label>
-                    <input type="email" value={managerEmail} onChange={e=>setManagerEmail(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-3 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                  </div>
-                </div>
+              <div className="pt-2 flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id="must_change_pwd" 
+                  checked={formData.must_change_password} 
+                  onChange={e => setFormData({ ...formData, must_change_password: e.target.checked })} 
+                />
+                <label htmlFor="must_change_pwd" className="text-xs text-gray-300">
+                  Require password change on first floor login
+                </label>
               </div>
 
-              <div className="flex justify-end gap-4 pt-4 border-t border-border-hairline mt-4">
-                <button type="button" onClick={() => setShowAddForm(false)} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
-                <button type="submit" disabled={submittingAdd} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-oxblood text-white hover:opacity-90 disabled:opacity-50 transition-colors">
-                  {submittingAdd ? "Creating..." : "Create Branch"}
+              <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                <button type="button" onClick={() => setIsAddOpen(false)} className="px-4 py-2 text-xs uppercase tracking-wider text-gray-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={formLoading} className="px-5 py-2 text-xs uppercase tracking-widest font-bold bg-[#B87333] hover:bg-[#a66426] text-white disabled:opacity-50 transition-colors">
+                  {formLoading ? "Creating..." : "Create Branch"}
                 </button>
               </div>
             </form>
           </div>
-        )}
+        </div>
+      )}
 
-        {loading ? <p className="text-text-secondary text-sm uppercase tracking-widest font-mono animate-pulse">Loading branches...</p> : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {activeBranches.map(branch => {
-              const isEditing = editingId === branch.branch_id;
-              const isLoss = branch.profit < 0;
-              
-              if (isEditing) {
-                return (
-                  <div key={branch.branch_id} className="block panel p-6 border-l-[3px] border-l-accent-oxblood bg-bg-panel-elevated">
-                    <form onSubmit={(e) => handleEditSubmit(e, branch.branch_id)} className="space-y-4">
-                      {editError && <div className="text-[#ff6b6b] text-[10px] font-bold uppercase tracking-widest">{editError}</div>}
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Branch Name</label>
-                        <input type="text" required value={editName} onChange={e=>setEditName(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-2 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Location</label>
-                        <input type="text" required value={editLocation} onChange={e=>setEditLocation(e.target.value)} className="w-full bg-bg-base border border-border-hairline p-2 text-text-primary font-mono text-sm focus:border-accent-oxblood focus:outline-none" />
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        <button type="button" onClick={() => setEditingId(null)} className="flex-1 py-2 font-medium text-[10px] uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors border border-border-hairline bg-bg-base flex justify-center items-center gap-1">
-                          <X size={12}/> Cancel
-                        </button>
-                        <button type="submit" disabled={submittingEdit} className="flex-1 py-2 font-bold text-[10px] uppercase tracking-widest bg-accent-oxblood text-white hover:opacity-90 disabled:opacity-50 transition-colors flex justify-center items-center gap-1">
-                          <Check size={12}/> {submittingEdit ? "..." : "Save"}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                )
-              }
-
-              return (
-                <Link key={branch.branch_id} href={`/admin/branches/${branch.branch_id}`} className={`group block panel p-6 border-l-[3px] transition-all hover:bg-bg-panel-elevated cursor-pointer relative ${isLoss ? 'border-l-accent-oxblood' : 'border-l-transparent hover:border-l-accent-oxblood'}`}>
-                  <button 
-                    onClick={(e) => startEdit(branch, e)}
-                    className="absolute top-4 right-4 p-2 text-text-secondary hover:text-accent-oxblood opacity-0 group-hover:opacity-100 transition-all z-10 bg-bg-base rounded border border-border-hairline hover:border-accent-oxblood"
-                    title="Edit Branch"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-10 h-10 rounded bg-bg-base border border-border-hairline flex items-center justify-center">
-                      <Building size={20} className="text-text-secondary group-hover:text-accent-oxblood transition-colors" />
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-text-primary mb-1 pr-8">{branch.branch_name}</h3>
-                  <p className="text-xs font-mono text-text-secondary uppercase tracking-widest mb-6">{branch.location}</p>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-t border-border-hairline pt-4">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Revenue</div>
-                      <div className="font-mono text-sm text-text-primary">{formatCurrency(branch.revenue)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Profit</div>
-                      <div className={`font-mono font-bold text-sm ${isLoss ? 'text-accent-oxblood' : 'text-[#4ade80]'}`}>
-                        {formatCurrency(branch.profit)}
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+      {/* Edit Branch Modal */}
+      {isEditOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#121212] border border-white/10 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-l-[3px] border-[#800020] pl-3">
+              <div>
+                <h2 className="text-xl font-fraunces text-white">Edit Branch</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Modify branch details or reset credentials.</p>
+              </div>
+              <button onClick={() => setIsEditOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
+            
+            {formError && <div className="bg-red-950/50 border border-red-900/50 text-red-200 text-xs p-3 mb-4 rounded-sm font-mono">{formError}</div>}
 
-            {deletedBranches.length > 0 && (
-              <div className="mt-12">
-                <h2 className="text-lg font-semibold text-text-primary mb-6 border-b border-border-hairline pb-2">Deleted Branches</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 opacity-60 hover:opacity-100 transition-opacity">
-                  {deletedBranches.map(branch => (
-                    <div key={branch.branch_id} className="block panel p-6 bg-bg-panel-elevated relative">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="w-10 h-10 rounded bg-bg-base border border-border-hairline flex items-center justify-center grayscale">
-                          <Building size={20} className="text-text-secondary" />
-                        </div>
-                        <button 
-                          onClick={(e) => handleReactivate(branch.branch_id, e)}
-                          disabled={reactivating === branch.branch_id}
-                          className="bg-bg-base border border-border-hairline px-3 py-1 text-[10px] uppercase tracking-widest font-bold text-text-secondary hover:text-white hover:bg-accent-oxblood transition-colors"
-                        >
-                          {reactivating === branch.branch_id ? "..." : "Reactivate"}
-                        </button>
-                      </div>
-                      <h3 className="text-lg font-semibold text-text-primary mb-1 pr-8 line-through">{branch.branch_name}</h3>
-                      <p className="text-xs font-mono text-text-secondary uppercase tracking-widest mb-6">{branch.location}</p>
-                      
-                      <div className="grid grid-cols-2 gap-4 border-t border-border-hairline pt-4">
-                        <div>
-                          <div className="text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Revenue</div>
-                          <div className="font-mono text-sm text-text-primary">{formatCurrency(branch.revenue)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] uppercase tracking-[0.15em] font-bold text-text-secondary mb-1">Profit</div>
-                          <div className="font-mono font-bold text-sm text-text-secondary">
-                            {formatCurrency(branch.profit)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Branch Name</label>
+                <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Branch Code (Slug)</label>
+                <input required value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Floor Login Email</label>
+                <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Reset Password (Optional)</label>
+                <input 
+                  type="text" 
+                  value={formData.password} 
+                  onChange={e => setFormData({ ...formData, password: e.target.value })} 
+                  className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono text-amber-400 focus:outline-none focus:border-[#800020]" 
+                  placeholder="Leave blank to keep current password" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Address / Location</label>
+                <input required value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Contact Phone</label>
+                <input required value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#800020]" />
+              </div>
+              
+              <div className="pt-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#800020] mb-1">Assign Manager</label>
+                <select 
+                  value={formData.manager_id} 
+                  onChange={e => setFormData({ ...formData, manager_id: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-white/10 px-3 py-2 text-sm focus:outline-none focus:border-[#800020]"
+                >
+                  <option value="">-- Unassigned --</option>
+                  {managers.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} {m.branch_id && m.branch_id !== formData.id ? "(Reassign from another branch)" : ""}
+                    </option>
                   ))}
+                </select>
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="is_active" checked={formData.is_active} onChange={e => setFormData({ ...formData, is_active: e.target.checked })} />
+                  <label htmlFor="is_active" className="text-xs text-gray-300">Branch is Active</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id="edit_must_change" 
+                    checked={formData.must_change_password} 
+                    onChange={e => setFormData({ ...formData, must_change_password: e.target.checked })} 
+                  />
+                  <label htmlFor="edit_must_change" className="text-xs text-gray-300">
+                    Require password change on next login
+                  </label>
                 </div>
               </div>
-            )}
-          </>
-        )}
-      </div>
 
-      {createdManager && (
-        <div className="fixed inset-0 bg-bg-base/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="panel border-l-[3px] border-l-[#4ade80] p-8 w-full max-w-md text-center">
-            <div className="w-12 h-12 rounded-full bg-[#163a24] flex items-center justify-center mx-auto mb-6">
-              <KeyRound size={24} className="text-[#4ade80]" />
+              <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                <button type="button" onClick={() => setIsEditOpen(false)} className="px-4 py-2 text-xs uppercase tracking-wider text-gray-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={formLoading} className="px-5 py-2 text-xs uppercase tracking-widest font-bold bg-[#800020] hover:bg-[#600018] text-white disabled:opacity-50 transition-colors">
+                  {formLoading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Created Credentials Confirmation Modal */}
+      {createdBranchCreds && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-[#1A1A1A] border border-white/10 border-l-[3px] border-l-[#B87333] p-8 w-full max-w-md text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-[#B87333]/15 flex items-center justify-center mx-auto mb-4">
+              <KeyRound size={22} className="text-[#B87333]" />
             </div>
-            <h3 className="text-2xl font-semibold mb-2 text-text-primary">Branch Created</h3>
-            <p className="text-xs text-text-secondary mb-8 uppercase tracking-widest leading-relaxed">
-              The branch has been initialized. Please share these credentials with {createdManager.name} securely. They will be required to change this password on their first login.
+
+            <h3 className="text-2xl font-serif font-semibold text-white mb-1">
+              Branch Profile Created
+            </h3>
+            <p className="text-xs text-gray-400 mb-6 leading-relaxed">
+              New branch floor account created for <strong className="text-white">{createdBranchCreds.name}</strong>. Share these temporary credentials with the branch operators.
             </p>
-            
-            <div className="bg-bg-base border border-border-hairline p-6 mb-8 text-left space-y-4">
+
+            <div className="bg-[#121212] border border-white/10 p-4 mb-6 text-left space-y-3 font-mono text-xs">
               <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary mb-1">Manager Login ID</div>
-                <div className="text-xl font-mono text-text-primary tracking-widest">{createdManager.login_id}</div>
+                <span className="text-[10px] uppercase text-gray-500 font-bold block mb-0.5">Portal URL</span>
+                <span className="text-white">/branch/login</span>
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-text-secondary mb-1">Temporary Password</div>
-                <div className="text-xl font-mono text-accent-oxblood tracking-widest">{createdManager.temp_password}</div>
+              <div className="flex justify-between items-center border-t border-white/5 pt-2">
+                <div>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block mb-0.5">Branch Code</span>
+                  <span className="text-[#B87333]">{createdBranchCreds.branch_code || createdBranchCreds.code}</span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(createdBranchCreds.branch_code || createdBranchCreds.code, 'created-code')}
+                  className="text-gray-400 hover:text-white"
+                >
+                  {copiedMap['created-code'] ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
+              </div>
+              <div className="flex justify-between items-center border-t border-white/5 pt-2">
+                <div>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block mb-0.5">Login Email</span>
+                  <span className="text-gray-200">{createdBranchCreds.email}</span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(createdBranchCreds.email || '', 'created-email')}
+                  className="text-gray-400 hover:text-white"
+                >
+                  {copiedMap['created-email'] ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
+              </div>
+              <div className="flex justify-between items-center border-t border-white/5 pt-2">
+                <div>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block mb-0.5">Temporary Password</span>
+                  <span className="text-amber-400 text-sm font-bold">{createdBranchCreds.display_password}</span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(createdBranchCreds.display_password || '', 'created-pwd')}
+                  className="text-gray-400 hover:text-white"
+                >
+                  {copiedMap['created-pwd'] ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
               </div>
             </div>
 
-            <button onClick={() => setCreatedManager(null)} className="w-full py-4 bg-bg-panel-elevated text-text-primary font-bold uppercase tracking-widest text-xs hover:bg-border-hairline transition-colors">
-              Done
+            <button 
+              onClick={() => setCreatedBranchCreds(null)} 
+              className="w-full py-3 bg-[#B87333] hover:bg-[#a66426] text-white font-bold text-xs uppercase tracking-widest transition-colors"
+            >
+              Done & Close
             </button>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

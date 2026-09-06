@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Check, X, AlertCircle, Search, User, Phone, Car } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { CheckoutPaymentModal } from "@/components/CheckoutPaymentModal";
 
 export default function ManagerDashboard() {
   // Manager States
@@ -17,6 +18,7 @@ export default function ManagerDashboard() {
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [completingJob, setCompletingJob] = useState<any | null>(null);
   const [formData, setFormData] = useState({ services: [], staff: [] });
   const [newJob, setNewJob] = useState({
     vehicle_make: "", vehicle_plate: "", service_id: "", assigned_to: "", customer_name: "", customer_phone: "", arrived_time: ""
@@ -92,6 +94,14 @@ export default function ManagerDashboard() {
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
+    if (newStatus === "finished") {
+      const targetJob = jobs.find((j) => j.id === id);
+      if (targetJob) {
+        setCompletingJob(targetJob);
+        return;
+      }
+    }
+
     setActionLoadingId(id);
     try {
       const res = await fetch("/api/manager/jobs/active", {
@@ -291,6 +301,19 @@ export default function ManagerDashboard() {
       )}
 
       {isModalOpen && <AddNewWorkWizard formData={formData} onClose={() => setIsModalOpen(false)} onSuccess={() => { setIsModalOpen(false); fetchJobs(true); }} />}
+
+      {/* Checkout & Payment Modal */}
+      {completingJob && (
+        <CheckoutPaymentModal
+          job={completingJob}
+          accentColor="gold"
+          onClose={() => setCompletingJob(null)}
+          onSuccess={(method) => {
+            setCompletingJob(null);
+            fetchJobs(true);
+          }}
+        />
+      )}
     </main>
   );
 }

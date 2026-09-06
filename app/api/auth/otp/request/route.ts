@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@libsql/client";
+import { db } from "@/lib/db";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
-
-const db = createClient({
-  url: process.env.LIBSQL_URL || "file:local.db",
-});
+import { sendOtpEmail } from "@/lib/email";
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function maskEmail(email: string): string {
+  if (!email || !email.includes("@")) return email;
+  const [user, domain] = email.split("@");
+  if (user.length <= 2) return `${user[0] || ""}***@${domain}`;
+  return `${user.slice(0, 2)}***${user.slice(-1)}@${domain}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -20,91 +23,52 @@ export async function POST(req: NextRequest) {
     }
 
     const userRes = await db.execute({
-      sql: "SELECT id, role, phone, email FROM users WHERE login_id = ?",
+      sql: "SELECT id, name, role, phone, email FROM users WHERE login_id = ?",
       args: [login_id],
     });
 
     if (userRes.rows.length === 0) {
-      // Prevent enumeration while failing safe
       return NextResponse.json({ message: "If that ID is registered, an OTP was sent." });
     }
 
     const user = userRes.rows[0];
 
-    if (!user.phone) {
+    if (!user.email) {
       return NextResponse.json(
-        { error: "No phone on file — contact your admin to reset your password" },
+        { error: "No registered email on file — contact your administrator to reset your password." },
         { status: 400 }
       );
     }
 
-    if (!process.env.WHATSAPP_API_KEY) {
-      return NextResponse.json(
-        { error: "WhatsApp API key not configured. Cannot deliver OTP." },
-        { status: 500 }
-      );
-    }
-
+    const emailStr = String(user.email).trim();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // Generate Phone OTP
-    const phoneOtp = generateOTP();
-    const phoneHash = await bcrypt.hash(phoneOtp, 10);
-    const phoneOtpId = crypto.randomUUID();
+    const otp = generateOTP();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const otpId = crypto.randomUUID();
 
+    // Invalidate existing unused password_reset OTPs
     await db.execute({
-      sql: `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at) VALUES (?, ?, 'phone', ?, 'password_reset', ?)`,
-      args: [phoneOtpId, user.id, phoneHash, expiresAt],
+      sql: `UPDATE otp_codes SET used = 1 WHERE user_id = ? AND purpose = 'password_reset' AND used = 0`,
+      args: [user.id],
     });
 
-    // Mock sending WhatsApp Message
-    console.log(`[WHATSAPP MOCK] Sent OTP ${phoneOtp} to ${user.phone}`);
+    await db.execute({
+      sql: `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at, used) VALUES (?, ?, 'email', ?, 'password_reset', ?, 0)`,
+      args: [otpId, user.id, otpHash, expiresAt],
+    });
 
-    // If Admin, generate Email OTP
-    if (user.role === 'admin') {
-      if (!user.email) {
-        return NextResponse.json(
-          { error: "Admin accounts must have an email configured for Two-Factor reset." },
-          { status: 400 }
-        );
-      }
-
-      const emailOtp = generateOTP();
-      const emailHash = await bcrypt.hash(emailOtp, 10);
-      const emailOtpId = crypto.randomUUID();
-
-      await db.execute({
-        sql: `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at) VALUES (?, ?, 'email', ?, 'password_reset', ?)`,
-        args: [emailOtpId, user.id, emailHash, expiresAt],
-      });
-
-      // Send Email
-      if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT) || 587,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-          },
-        });
-
-        const info = await transporter.sendMail({
-          from: process.env.EMAIL_FROM || process.env.SMTP_USER,
-          to: user.email as string,
-          subject: "Magma Autospa - Admin Password Reset OTP",
-          text: `Your Admin Verification Code is: ${emailOtp}`,
-        });
-        console.log("[SMTP LIVE TEST] Nodemailer response:", info);
-      } else {
-        console.log(`[SMTP MOCK] Sent Admin Email OTP ${emailOtp} to ${user.email}`);
-      }
-    }
+    // Send OTP via unified email service
+    await sendOtpEmail(emailStr, otp, {
+      purpose: "password_reset",
+      recipientName: user.name as string,
+    });
 
     return NextResponse.json({ 
       success: true, 
       role: user.role,
-      message: "OTP sent successfully."
+      masked_email: maskEmail(emailStr),
+      message: `Verification code sent to registered email (${maskEmail(emailStr)}).`
     });
   } catch (error) {
     console.error("OTP Request error:", error);

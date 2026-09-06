@@ -27,6 +27,8 @@ export async function GET(request: Request) {
       sql: `SELECT 
               t.id, 
               t.status, 
+              t.total_amount,
+              t.payment_method,
               t.created_at,
               t.claimed_at,
               t.finished_at,

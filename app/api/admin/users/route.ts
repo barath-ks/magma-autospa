@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await db.execute("SELECT id, login_id, email, role, branch_id, created_at, must_change_password FROM users WHERE role IN ('staff', 'manager') AND is_active = 1");
+    const result = await db.execute("SELECT id, login_id, name, email, role, branch_id, created_at, must_change_password FROM users WHERE role IN ('staff', 'manager') AND is_active = 1");
     return NextResponse.json({ users: result.rows });
   } catch (error) {
     console.error("GET users error", error);

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, Eye, EyeOff } from "lucide-react";
 import PasswordStrengthIndicator from "@/components/PasswordStrengthIndicator";
 
 export default function ForceChangePassword() {
@@ -10,6 +10,9 @@ export default function ForceChangePassword() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -65,26 +68,46 @@ export default function ForceChangePassword() {
             <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
               Current (Temporary) Password
             </label>
-            <input 
-              type="password" 
-              value={currentPassword} 
-              onChange={e => setCurrentPassword(e.target.value)} 
-              className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
-              required 
-            />
+            <div className="relative">
+              <input 
+                type={showCurrentPassword ? "text" : "password"} 
+                value={currentPassword} 
+                onChange={e => setCurrentPassword(e.target.value)} 
+                className="block w-full border border-border-hairline-strong bg-bg-base p-3 pr-10 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
+                required 
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+              >
+                {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           
           <div>
             <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
               New Password
             </label>
-            <input 
-              type="password" 
-              value={newPassword} 
-              onChange={e => setNewPassword(e.target.value)} 
-              className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
-              required 
-            />
+            <div className="relative">
+              <input 
+                type={showNewPassword ? "text" : "password"} 
+                value={newPassword} 
+                onChange={e => setNewPassword(e.target.value)} 
+                className="block w-full border border-border-hairline-strong bg-bg-base p-3 pr-10 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
+                required 
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                aria-label={showNewPassword ? "Hide password" : "Show password"}
+              >
+                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
             <PasswordStrengthIndicator password={newPassword} />
           </div>
           
@@ -92,13 +115,23 @@ export default function ForceChangePassword() {
             <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
               Confirm New Password
             </label>
-            <input 
-              type="password" 
-              value={confirmPassword} 
-              onChange={e => setConfirmPassword(e.target.value)} 
-              className="block w-full border border-border-hairline-strong bg-bg-base p-3 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
-              required 
-            />
+            <div className="relative">
+              <input 
+                type={showConfirmPassword ? "text" : "password"} 
+                value={confirmPassword} 
+                onChange={e => setConfirmPassword(e.target.value)} 
+                className="block w-full border border-border-hairline-strong bg-bg-base p-3 pr-10 text-text-primary font-mono text-sm placeholder-text-secondary/50 focus:border-text-secondary focus:outline-none focus:ring-1 focus:ring-text-secondary transition-all" 
+                required 
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              >
+                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           
           <button 

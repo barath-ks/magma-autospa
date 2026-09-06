@@ -11,7 +11,7 @@ const BASE_URL = "http://localhost:3000";
 
 async function loginAs(role: "admin" | "staff") {
   let login_id = "";
-  let password = "password";
+  const password = "password";
   
   if (role === "admin") login_id = "test_admin";
   else if (role === "staff") login_id = "test_staff_a";

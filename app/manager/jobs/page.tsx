@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { ListOrdered, AlertCircle, RefreshCw } from "lucide-react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { PaymentBadge } from "@/components/PaymentBadge";
+import { formatCurrency } from "@/lib/format";
 
 export default function ManagerJobsPage() {
   const [range, setRange] = useState("month");
@@ -141,6 +143,7 @@ export default function ManagerJobsPage() {
                     <th className="p-4">Vehicle</th>
                     <th className="p-4">Service</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4">Payment</th>
                     <th className="p-4">Assigned To</th>
                     <th className="p-4">Arrived</th>
                     <th className="p-4">Claimed</th>
@@ -154,6 +157,20 @@ export default function ManagerJobsPage() {
                       <td className="p-4 text-text-secondary text-sm">{job.vehicle_model} <span className="font-mono text-xs opacity-70 ml-1">({job.vehicle_number})</span></td>
                       <td className="p-4 text-text-secondary text-sm">{job.service_name || "Unknown"}</td>
                       <td className="p-4">{getStatusBadge(job.status)}</td>
+                      <td className="p-4">
+                        {job.status === "finished" ? (
+                          <div className="flex flex-col gap-0.5">
+                            <PaymentBadge method={job.payment_method} size="sm" />
+                            {job.total_amount && (
+                              <span className="font-mono text-[10px] text-text-secondary">
+                                {formatCurrency(job.total_amount)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-text-secondary/50 font-mono text-xs">—</span>
+                        )}
+                      </td>
                       <td className="p-4">
                         {job.assigned_staff_name ? (
                           <span className="text-text-primary text-sm">{job.assigned_staff_name}</span>

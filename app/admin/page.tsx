@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Check, X, AlertCircle } from "lucide-react";
+import { Check, X, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
@@ -213,6 +213,7 @@ export default function AdminDashboard() {
 function ResetPasswordModal({ user, onClose, onSuccess }: any) {
   const [loginId, setLoginId] = useState(user.login_id);
   const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [requireChange, setRequireChange] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -259,7 +260,17 @@ function ResetPasswordModal({ user, onClose, onSuccess }: any) {
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">New Temporary Password</label>
-            <input type="text" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-text-secondary focus:outline-none transition-colors" />
+            <div className="relative">
+              <input type={showPassword ? "text" : "password"} value={newPassword} onChange={e=>setNewPassword(e.target.value)} className="w-full bg-bg-base border border-border-hairline-strong p-3 pr-10 text-text-primary font-mono text-sm focus:border-text-secondary focus:outline-none transition-colors" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <div className="flex items-center pt-3">
             <input type="checkbox" id="reqChange" checked={requireChange} onChange={e=>setRequireChange(e.target.checked)} className="h-4 w-4 bg-bg-base border-border-hairline-strong accent-accent-oxblood focus:ring-0 cursor-pointer" />

@@ -7,7 +7,8 @@ import { v4 as uuidv4 } from "uuid";
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session || !session.user || (session.user as any).role !== "manager" && (session.user as any).role !== "admin") {
+  const role = (session.user as any).role;
+  if (!session || !session.user || (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -15,7 +16,12 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { customer_id, service_ids, assigned_to, vehicle_id } = body;
+    const { customer_id, service_ids, assigned_to, vehicle_id, payment_method } = body;
+
+    const validPaymentMethods = ["cash", "upi", "card"];
+    const finalPaymentMethod = payment_method && validPaymentMethods.includes(payment_method)
+      ? payment_method
+      : "cash";
 
     // 1. Validate inputs
     if (!customer_id || !vehicle_id || !Array.isArray(service_ids) || service_ids.length === 0) {
@@ -108,9 +114,9 @@ export async function POST(request: Request) {
 
     // Insert Transaction
     batchStatements.push({
-      sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, vehicle_id, vehicle_model, vehicle_number, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, CURRENT_TIMESTAMP)`,
-      args: [transactionId, customer_id, staffBranchId, finalAssignee, totalAmount, pointsAwarded, vehicle_id, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number],
+      sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, payment_method, vehicle_id, vehicle_model, vehicle_number, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      args: [transactionId, customer_id, staffBranchId, finalAssignee, totalAmount, pointsAwarded, finalPaymentMethod, vehicle_id, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number],
     });
 
     // Insert Transaction Services

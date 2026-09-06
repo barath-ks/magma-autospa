@@ -97,7 +97,15 @@ export default function CustomersPage() {
 }
 
 function NewCustomerModal({ onClose, onSuccess }: { onClose: () => void, onSuccess: (c: any) => void }) {
-  const [formData, setFormData] = useState({ name: "", phone: "", email: "", vehicle_number: "", vehicle_model: "" });
+  const [formData, setFormData] = useState({ 
+    name: "", 
+    phone: "", 
+    email: "", 
+    vehicle_number: "", 
+    vehicle_type: "sedan",
+    vehicle_make: "", 
+    vehicle_model: "" 
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -105,56 +113,96 @@ function NewCustomerModal({ onClose, onSuccess }: { onClose: () => void, onSucce
     e.preventDefault();
     setError("");
     setLoading(true);
-    const res = await fetch("/api/manager/customers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData)
-    });
-    const data = await res.json();
-    if (res.ok) {
-      onSuccess(data);
-    } else {
-      setError(data.error || "System Error");
+    try {
+      const res = await fetch("/api/manager/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSuccess(data);
+      } else {
+        setError(data.error || "System Error");
+      }
+    } catch (err) {
+      setError("Network or server connection error.");
+    } finally {
       setLoading(false);
     }
   };
 
   return (
     <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="panel border-l-[3px] border-l-accent-copper p-8 w-full max-w-lg">
+      <div className="panel border-l-[3px] border-l-accent-copper p-8 w-full max-w-xl max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-semibold mb-2 text-text-primary">New Client Registration</h3>
-        <p className="text-xs font-mono text-text-secondary mb-8 uppercase tracking-wider">Initialize customer profile</p>
+        <p className="text-xs font-mono text-text-secondary mb-6 uppercase tracking-wider">Initialize customer profile & primary vehicle</p>
         
-        {error && <div className="text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] text-xs uppercase tracking-widest font-bold mb-6 p-3">{error}</div>}
+        {error && (
+          <div className="mb-6 text-[#ff6b6b] bg-[#3a1616] border border-[#521d1d] p-3.5 text-xs uppercase tracking-wider font-semibold rounded-sm">
+            <span className="font-bold block mb-0.5 font-mono">Registration Alert:</span>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-2 gap-5">
+          <div className="text-[11px] font-mono uppercase tracking-widest text-accent-copper font-bold border-b border-border-hairline pb-2">
+            1. Client Identity
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Full Name *</label>
-              <input required type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">Full Name *</label>
+              <input required type="text" placeholder="e.g. Alex Mercer" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Phone Number *</label>
-              <input required type="tel" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">Phone Number * (Unique)</label>
+              <input required minLength={10} type="tel" placeholder="e.g. 9876543210" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
             </div>
-            <div className="col-span-2">
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Email Address *</label>
-              <input required type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            <div className="sm:col-span-2">
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">Email Address (Optional)</label>
+              <input type="email" placeholder="e.g. customer@example.com" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
             </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Number</label>
-              <input type="text" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors uppercase" />
+          </div>
+
+          <div className="text-[11px] font-mono uppercase tracking-widest text-accent-copper font-bold border-b border-border-hairline pb-2 pt-2">
+            2. Primary Vehicle Details
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">License Plate Number *</label>
+              <input required type="text" placeholder="e.g. KL-07-CD-1234" value={formData.vehicle_number} onChange={e=>setFormData({...formData, vehicle_number: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors uppercase font-bold" />
             </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-2 text-text-secondary">Vehicle Model</label>
-              <input type="text" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" placeholder="e.g. Porsche 911 GT3" />
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">Vehicle Type *</label>
+              <select 
+                value={formData.vehicle_type} 
+                onChange={e=>setFormData({...formData, vehicle_type: e.target.value})}
+                className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors uppercase"
+              >
+                <option value="sedan">Sedan</option>
+                <option value="suv">SUV</option>
+                <option value="hatchback">Hatchback</option>
+                <option value="xuv">XUV</option>
+                <option value="truck">Truck</option>
+                <option value="van">Van</option>
+                <option value="bike">Bike</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">Vehicle Make (Brand)</label>
+              <input type="text" placeholder="e.g. BMW, Porsche, Hyundai" value={formData.vehicle_make} onChange={e=>setFormData({...formData, vehicle_make: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.15em] font-bold mb-1.5 text-text-secondary">Vehicle Model</label>
+              <input type="text" placeholder="e.g. M3 Competition, 911 GT3" value={formData.vehicle_model} onChange={e=>setFormData({...formData, vehicle_model: e.target.value})} className="w-full bg-bg-base border border-border-hairline-strong p-3 text-text-primary font-mono text-sm focus:border-accent-copper focus:outline-none transition-colors" />
             </div>
           </div>
           
           <div className="mt-8 flex justify-end gap-4 pt-4 border-t border-border-hairline">
             <button type="button" onClick={onClose} className="px-4 py-2 font-medium text-xs uppercase tracking-widest text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
-            <button type="submit" disabled={loading} className="px-6 py-2 font-bold text-xs uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
-              {loading ? "Executing..." : "Register"}
+            <button type="submit" disabled={loading} className="px-6 py-2.5 font-bold text-xs uppercase tracking-widest bg-accent-copper text-white hover:bg-opacity-90 disabled:opacity-50 transition-colors">
+              {loading ? "Registering..." : "Register Client"}
             </button>
           </div>
         </form>

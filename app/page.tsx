@@ -36,15 +36,15 @@ export default function Home() {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full">
             <Link 
-              href="/login?role=staff" 
+              href="/branch/login" 
               className="panel flex flex-col p-6 hover:bg-bg-panel-elevated transition-colors border-l-[3px] border-l-accent-copper hover:-translate-y-0.5 active:translate-y-0 duration-200"
             >
-              <span className="text-accent-copper font-mono text-[11px] uppercase tracking-[0.08em] font-bold mb-3">STAFF ACCESS</span>
-              <span className="text-text-primary font-medium text-lg">Staff Portal</span>
+              <span className="text-accent-copper font-mono text-[11px] uppercase tracking-[0.08em] font-bold mb-3">BRANCH ACCESS</span>
+              <span className="text-text-primary font-medium text-lg">Branch Portal</span>
             </Link>
             
             <Link 
-              href="/login?role=manager" 
+              href="/manager/login" 
               className="panel flex flex-col p-6 hover:bg-bg-panel-elevated transition-colors border-l-[3px] border-l-accent-gold hover:-translate-y-0.5 active:translate-y-0 duration-200"
             >
               <span className="text-accent-gold font-mono text-[11px] uppercase tracking-[0.08em] font-bold mb-3">MANAGER ACCESS</span>
@@ -52,7 +52,7 @@ export default function Home() {
             </Link>
             
             <Link 
-              href="/login?role=admin" 
+              href="/admin/login" 
               className="panel flex flex-col p-6 hover:bg-bg-panel-elevated transition-colors border-l-[3px] border-l-accent-oxblood hover:-translate-y-0.5 active:translate-y-0 duration-200"
             >
               <span className="text-accent-oxblood font-mono text-[11px] uppercase tracking-[0.08em] font-bold mb-3">ADMIN ACCESS</span>

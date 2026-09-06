@@ -58,9 +58,9 @@ async function run() {
   console.log("\n=== 2. Creating Transaction (Duplicates Allowed) ===");
   // Check Manager Analytics beforehand
   (global as any).testSession = await mockSession("manager", branchId1, managerId);
-  let reqAnalytics = new Request("http://localhost/api");
+  const reqAnalytics = new Request("http://localhost/api");
   let resAnalytics = await managerAnalyticsRoute.GET(reqAnalytics);
-  let initialAnalytics = await resAnalytics.json();
+  const initialAnalytics = await resAnalytics.json();
   console.log("Manager Analytics Initial Revenue:", initialAnalytics.revenue);
 
   // Re-auth as staff
@@ -110,22 +110,22 @@ async function run() {
   // Check Manager Analytics afterwards
   (global as any).testSession = await mockSession("manager", branchId1, managerId);
   resAnalytics = await managerAnalyticsRoute.GET(reqAnalytics);
-  let finalAnalytics = await resAnalytics.json();
+  const finalAnalytics = await resAnalytics.json();
   console.log("Manager Analytics Final Revenue (Expected Initial + 250):", finalAnalytics.revenue);
 
   console.log("\n=== 4. Branch Isolation & Visibility ===");
   // Staff fetching jobs on branch 2 shouldn't see anything.
   (global as any).testSession = await mockSession("staff", branchId2, uuidv4());
-  let reqJobsB2 = new Request("http://localhost/api");
-  let resJobsB2 = await staffJobsRoute.GET(reqJobsB2);
-  let jobsB2 = await resJobsB2.json();
+  const reqJobsB2 = new Request("http://localhost/api");
+  const resJobsB2 = await staffJobsRoute.GET(reqJobsB2);
+  const jobsB2 = await resJobsB2.json();
   console.log("Branch B Jobs Count:", jobsB2.jobs.length);
 
   // Manager fetching analytics on branch 2 shouldn't see the 250 revenue.
   (global as any).testSession = await mockSession("manager", branchId2, uuidv4());
-  let reqAnalyticsB2 = new Request("http://localhost/api");
-  let resAnalyticsB2 = await managerAnalyticsRoute.GET(reqAnalyticsB2);
-  let analyticsB2 = await resAnalyticsB2.json();
+  const reqAnalyticsB2 = new Request("http://localhost/api");
+  const resAnalyticsB2 = await managerAnalyticsRoute.GET(reqAnalyticsB2);
+  const analyticsB2 = await resAnalyticsB2.json();
   console.log("Branch B Analytics Revenue:", analyticsB2.revenue);
 
   console.log("\nVerification complete!");
