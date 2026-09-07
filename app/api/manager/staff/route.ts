@@ -13,14 +13,12 @@ export async function GET(request: Request) {
   const branchId = (session.user as any).branch_id;
 
   try {
-    const result = await db.execute({
-      sql: `SELECT id, login_id, name, phone, email, created_at FROM users 
-            WHERE branch_id = ? AND role = 'staff'
-            ORDER BY created_at DESC`,
-      args: [branchId],
-    });
+    const staffRes = await db.query(
+      "SELECT id, login_id, name, email, phone, role, is_active, is_available FROM users WHERE branch_id = $1 AND role = 'staff' AND is_active = TRUE",
+      [branchId]
+    );
 
-    return NextResponse.json({ staff: result.rows });
+    return NextResponse.json({ staff: staffRes.rows });
   } catch (error) {
     console.error("Error fetching staff:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

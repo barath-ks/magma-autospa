@@ -20,10 +20,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
     }
 
-    const currentOfferRes = await db.execute({
-      sql: "SELECT service_id, offer_price, branch_id FROM service_offers WHERE id = ?",
-      args: [id]
-    });
+    const currentOfferRes = await db.query(
+      "SELECT service_id, offer_price, branch_id FROM service_offers WHERE id = $1",
+      [id]
+    );
     
     if (currentOfferRes.rows.length === 0) {
       return NextResponse.json({ error: "Service offer not found" }, { status: 404 });
@@ -35,19 +35,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     
     const updates = [];
     const args: any[] = [];
+    let pIdx = 1;
     
     if (service_id !== undefined) {
-      updates.push("service_id = ?"); args.push(service_id);
+      updates.push(`service_id = $${pIdx++}`); args.push(service_id);
     }
     if (offer_price !== undefined) {
       offer_price = Number(offer_price);
       if (isNaN(offer_price) || offer_price <= 0) {
         return NextResponse.json({ error: "Offer price must be > 0" }, { status: 400 });
       }
-      updates.push("offer_price = ?"); args.push(offer_price);
+      updates.push(`offer_price = $${pIdx++}`); args.push(offer_price);
     }
     if (is_active !== undefined) {
-      updates.push("is_active = ?"); args.push(is_active ? 1 : 0);
+      updates.push(`is_active = $${pIdx++}`); args.push(is_active ? 1 : 0);
     }
 
     if (updates.length === 0) {
@@ -58,10 +59,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const targetOfferPrice = offer_price !== undefined ? offer_price : currentOfferRes.rows[0].offer_price;
     
     // Cross-branch check and original price check
-    const serviceRes = await db.execute({
-      sql: "SELECT price, branch_id FROM services WHERE id = ?",
-      args: [targetServiceId]
-    });
+    const serviceRes = await db.query(
+      "SELECT price, branch_id FROM services WHERE id = $1",
+      [targetServiceId]
+    );
 
     if (serviceRes.rows.length === 0) {
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -78,10 +79,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     args.push(id);
 
-    await db.execute({
-      sql: `UPDATE service_offers SET ${updates.join(", ")} WHERE id = ?`,
+    await db.query(
+      `UPDATE service_offers SET ${updates.join(", ")} WHERE id = $${pIdx}`,
       args
-    });
+    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -106,10 +107,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   }
 
   try {
-    const currentOfferRes = await db.execute({
-      sql: "SELECT branch_id FROM service_offers WHERE id = ?",
-      args: [id]
-    });
+    const currentOfferRes = await db.query(
+      "SELECT branch_id FROM service_offers WHERE id = $1",
+      [id]
+    );
     
     if (currentOfferRes.rows.length === 0) {
       return NextResponse.json({ error: "Service offer not found" }, { status: 404 });
@@ -120,10 +121,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     }
 
     // Soft delete
-    await db.execute({
-      sql: "UPDATE service_offers SET is_active = 0 WHERE id = ?",
-      args: [id]
-    });
+    await db.query(
+      "UPDATE service_offers SET is_active = FALSE WHERE id = $1",
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

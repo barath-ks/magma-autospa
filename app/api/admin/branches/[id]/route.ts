@@ -27,18 +27,18 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
 
   try {
-    const branchRes = await db.execute({
-      sql: `
+    const branchRes = await db.query(
+      `
         SELECT 
           b.id, b.name, b.code, b.branch_code, b.email, b.display_password, b.must_change_password, b.location, b.phone, b.is_active, b.created_at,
           (SELECT COUNT(*) FROM users u WHERE u.branch_id = b.id AND u.role = 'staff' AND u.is_active = 1) as active_staff_count,
           (SELECT u.id FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = 1 LIMIT 1) as manager_id,
           (SELECT u.name FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = 1 LIMIT 1) as manager_name
         FROM branches b
-        WHERE b.id = ?
+        WHERE b.id = $1
       `,
-      args: [id]
-    });
+      [id]
+    );
     
     if (branchRes.rows.length === 0) {
       return NextResponse.json({ error: "Branch not found" }, { status: 404 });
@@ -72,108 +72,114 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const { name, code, email, location, phone, password, must_change_password, is_active, manager_id } = result.data;
 
     // Inspect available columns in branches table
-    const tableInfo = await db.execute("PRAGMA table_info(branches)");
-    const availableColumns = new Set(tableInfo.rows.map((r: any) => r.name));
+    const tableInfo = await db.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'branches'"
+    );
+    const availableColumns = new Set(tableInfo.rows.map((r: any) => r.column_name));
 
     // Build dynamic update for branch
     const updates: string[] = [];
     const args: any[] = [];
+    let pIdx = 1;
 
     if (name !== undefined && availableColumns.has("name")) {
-      updates.push("name = ?");
+      updates.push(`name = $${pIdx++}`);
       args.push(name.trim());
     }
 
     if (code !== undefined) {
       if (availableColumns.has("code")) {
-        updates.push("code = ?");
+        updates.push(`code = $${pIdx++}`);
         args.push(code.trim());
       }
       if (availableColumns.has("branch_code")) {
-        updates.push("branch_code = ?");
+        updates.push(`branch_code = $${pIdx++}`);
         args.push(code.trim().toUpperCase());
       }
     }
 
     if (email !== undefined && availableColumns.has("email")) {
       const cleanEmail = email && email.trim() !== "" ? email.trim() : null;
-      updates.push("email = ?");
+      updates.push(`email = $${pIdx++}`);
       args.push(cleanEmail);
     }
 
     if (location !== undefined) {
       if (availableColumns.has("location")) {
-        updates.push("location = ?");
+        updates.push(`location = $${pIdx++}`);
         args.push(location.trim());
       }
       if (availableColumns.has("address")) {
-        updates.push("address = ?");
+        updates.push(`address = $${pIdx++}`);
         args.push(location.trim());
       }
     }
 
     if (phone !== undefined && availableColumns.has("phone")) {
-      updates.push("phone = ?");
+      updates.push(`phone = $${pIdx++}`);
       args.push(phone && phone.trim() !== "" ? phone.trim() : null);
     }
 
     if (is_active !== undefined && availableColumns.has("is_active")) {
-      updates.push("is_active = ?");
-      args.push(is_active ? 1 : 0);
+      updates.push(`is_active = $${pIdx++}`);
+      args.push(is_active ? true : false);
     }
 
     if (password !== undefined && password !== null && password.trim() !== "") {
       const hashedPassword = await bcrypt.hash(password.trim(), 10);
       if (availableColumns.has("password_hash")) {
-        updates.push("password_hash = ?");
+        updates.push(`password_hash = $${pIdx++}`);
         args.push(hashedPassword);
       }
       if (availableColumns.has("display_password")) {
-        updates.push("display_password = ?");
+        updates.push(`display_password = $${pIdx++}`);
         args.push(password.trim());
       }
       if (availableColumns.has("must_change_password")) {
-        const mustChangeVal = must_change_password !== undefined ? (must_change_password ? 1 : 0) : 1;
-        updates.push("must_change_password = ?");
+        const mustChangeVal = must_change_password !== undefined ? (must_change_password ? true : false) : true;
+        updates.push(`must_change_password = $${pIdx++}`);
         args.push(mustChangeVal);
       }
     } else if (must_change_password !== undefined && availableColumns.has("must_change_password")) {
-      updates.push("must_change_password = ?");
-      args.push(must_change_password ? 1 : 0);
+      updates.push(`must_change_password = $${pIdx++}`);
+      args.push(must_change_password ? true : false);
     }
 
-    const txn = await db.transaction("write");
+    const client = await db.connect();
 
     try {
+      await client.query("BEGIN");
+
       if (updates.length > 0) {
         // If code, name, or email is updated, ensure no duplicates
         const checkConditions: string[] = [];
         const checkArgs: any[] = [];
+        let cIdx = 1;
 
         if (name !== undefined && availableColumns.has("name")) {
-          checkConditions.push("name = ? COLLATE NOCASE");
+          checkConditions.push(`LOWER(name) = LOWER($${cIdx++})`);
           checkArgs.push(name.trim());
         }
         if (code !== undefined) {
           if (availableColumns.has("code")) {
-            checkConditions.push("code = ? COLLATE NOCASE");
+            checkConditions.push(`LOWER(code) = LOWER($${cIdx++})`);
             checkArgs.push(code.trim());
           }
           if (availableColumns.has("branch_code")) {
-            checkConditions.push("branch_code = ? COLLATE NOCASE");
+            checkConditions.push(`LOWER(branch_code) = LOWER($${cIdx++})`);
             checkArgs.push(code.trim().toUpperCase());
           }
         }
         if (email !== undefined && email && email.trim() !== "" && availableColumns.has("email")) {
-          checkConditions.push("email = ? COLLATE NOCASE");
+          checkConditions.push(`LOWER(email) = LOWER($${cIdx++})`);
           checkArgs.push(email.trim());
         }
 
         if (checkConditions.length > 0) {
-          const existing = await txn.execute({
-            sql: `SELECT id FROM branches WHERE (${checkConditions.join(" OR ")}) AND id != ? LIMIT 1`,
-            args: [...checkArgs, id]
-          });
+          const existing = await client.query(
+            `SELECT id FROM branches WHERE (${checkConditions.join(" OR ")}) AND id != $${cIdx} LIMIT 1`,
+            [...checkArgs, id]
+          );
           
           if (existing.rows.length > 0) {
             throw new Error("DUPLICATE_NAME_OR_CODE");
@@ -181,49 +187,49 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         }
       
         args.push(id);
-        await txn.execute({
-          sql: `UPDATE branches SET ${updates.join(", ")} WHERE id = ?`,
-          args,
-        });
+        await client.query(
+          `UPDATE branches SET ${updates.join(", ")} WHERE id = $${pIdx}`,
+          args
+        );
       }
 
       // Handle Manager Assignment
       if (manager_id !== undefined) {
         if (manager_id === null || manager_id === "") {
           // Detach current manager(s)
-          await txn.execute({
-            sql: "UPDATE users SET branch_id = NULL WHERE branch_id = ? AND role = 'manager'",
-            args: [id]
-          });
+          await client.query(
+            "UPDATE users SET branch_id = NULL WHERE branch_id = $1 AND role = 'manager'",
+            [id]
+          );
         } else {
           // Validate the new manager exists and is active manager
-          const mgrCheck = await txn.execute({
-            sql: "SELECT id FROM users WHERE id = ? AND role = 'manager' AND is_active = 1",
-            args: [manager_id]
-          });
+          const mgrCheck = await client.query(
+            "SELECT id FROM users WHERE id = $1 AND role = 'manager' AND is_active = 1",
+            [manager_id]
+          );
           
           if (mgrCheck.rows.length === 0) {
             throw new Error("INVALID_MANAGER");
           }
           
           // Detach existing manager(s)
-          await txn.execute({
-            sql: "UPDATE users SET branch_id = NULL WHERE branch_id = ? AND role = 'manager'",
-            args: [id]
-          });
+          await client.query(
+            "UPDATE users SET branch_id = NULL WHERE branch_id = $1 AND role = 'manager'",
+            [id]
+          );
           
           // Assign the new manager
-          await txn.execute({
-            sql: "UPDATE users SET branch_id = ? WHERE id = ?",
-            args: [id, manager_id]
-          });
+          await client.query(
+            "UPDATE users SET branch_id = $1 WHERE id = $2",
+            [id, manager_id]
+          );
         }
       }
 
-      await txn.commit();
+      await client.query("COMMIT");
       return NextResponse.json({ success: true });
     } catch (txnError: any) {
-      await txn.rollback();
+      await client.query("ROLLBACK");
       if (txnError.message === "DUPLICATE_NAME_OR_CODE") {
         return NextResponse.json({ error: "A branch with this name, code, or email already exists" }, { status: 400 });
       }
@@ -232,6 +238,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       }
       console.error("[BRANCH_UPDATE_TXN_ERROR] Transaction failed for branch id:", id, txnError);
       throw txnError;
+    } finally {
+      client.release();
     }
   } catch (error: any) {
     console.error("[BRANCH_UPDATE_ERROR] Branch update failed for id:", id, {
@@ -256,10 +264,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
   try {
     // Soft delete
-    await db.execute({
-      sql: "UPDATE branches SET is_active = 0 WHERE id = ?",
-      args: [id],
-    });
+    await db.query(
+      "UPDATE branches SET is_active = 0 WHERE id = $1",
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

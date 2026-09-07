@@ -3,10 +3,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Users, Building, Tag, Percent, Contact, LineChart, Gift } from "lucide-react";
-
+export const dynamic = 'force-dynamic';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  
+
   if (pathname === "/admin/login") {
     return <>{children}</>;
   }
@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Admin Terminal
           </div>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-2">
           <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary px-4 py-2 mt-4">System</div>
           <Link href="/admin/branches" className={linkClass("/admin/branches")}>
@@ -53,13 +53,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Contact size={16} /> Customers
           </Link>
         </nav>
-        
+
         <div className="p-4 border-t border-border-hairline space-y-2">
           <Link href="/profile" className="flex items-center justify-center gap-2 w-full text-xs font-bold text-text-primary hover:bg-bg-panel-elevated px-4 py-2.5 uppercase tracking-widest transition-colors border border-border-hairline">
             My Profile
           </Link>
-          <button 
-            onClick={() => signOut({ callbackUrl: "/admin/login" })} 
+          <button
+            onClick={() => signOut({ callbackUrl: "/admin/login" })}
             className="w-full text-xs font-bold text-white bg-accent-oxblood hover:bg-opacity-90 px-4 py-2.5 uppercase tracking-widest transition-colors flex justify-center items-center gap-2"
           >
             Log Out

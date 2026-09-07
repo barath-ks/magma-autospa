@@ -18,13 +18,13 @@ export async function GET(request: Request) {
   const limit = 100;
   const offset = (page - 1) * limit;
 
-  let dateModifier = "'-1 month'";
-  if (range === "week") dateModifier = "'-7 days'";
-  if (range === "year") dateModifier = "'-1 year'";
+  let intervalStr = "1 month";
+  if (range === "week") intervalStr = "7 days";
+  if (range === "year") intervalStr = "1 year";
 
   try {
-    const result = await db.execute({
-      sql: `SELECT 
+    const result = await db.query(
+      `SELECT 
               t.id, 
               t.status, 
               t.total_amount,
@@ -44,11 +44,11 @@ export async function GET(request: Request) {
             FROM transactions t
             JOIN customers c ON t.customer_id = c.id
             LEFT JOIN users u ON t.staff_id = u.id
-            WHERE t.branch_id = ? AND t.created_at >= datetime('now', ${dateModifier})
+            WHERE t.branch_id = $1 AND t.created_at >= NOW() - INTERVAL '${intervalStr}'
             ORDER BY t.created_at DESC
-            LIMIT ? OFFSET ?`,
-      args: [branchId, limit, offset],
-    });
+            LIMIT $2 OFFSET $3`,
+      [branchId, limit, offset]
+    );
 
     return NextResponse.json({ jobs: result.rows });
   } catch (error) {

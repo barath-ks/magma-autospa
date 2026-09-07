@@ -11,8 +11,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await db.execute("SELECT * FROM services WHERE is_active = 1 ORDER BY name ASC");
-    return NextResponse.json({ services: result.rows });
+    const res = await db.query(
+      `SELECT * FROM services WHERE is_active = TRUE ORDER BY category, name ASC`
+    );
+    return NextResponse.json({ services: res.rows });
   } catch (error) {
     console.error("Error fetching staff services:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

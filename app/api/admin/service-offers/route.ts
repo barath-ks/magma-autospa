@@ -19,8 +19,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await db.execute({
-      sql: `
+    const res = await db.query(
+      `
       SELECT 
         so.*, 
         s.name as service_name,
@@ -29,11 +29,11 @@ export async function GET(request: Request) {
       FROM service_offers so
       JOIN services s ON so.service_id = s.id
       LEFT JOIN branches b ON so.branch_id = b.id
-      WHERE so.branch_id = ?
+      WHERE so.branch_id = $1
       ORDER BY so.created_at DESC
     `,
-      args: [branch_id]
-    });
+      [branch_id]
+    );
     
     return NextResponse.json({ serviceOffers: res.rows });
   } catch (error: any) {
@@ -59,10 +59,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Valid service ID, branch_id, and offer price > 0 are required" }, { status: 400 });
     }
 
-    const serviceRes = await db.execute({
-      sql: "SELECT price, branch_id FROM services WHERE id = ?",
-      args: [service_id]
-    });
+    const serviceRes = await db.query(
+      "SELECT price, branch_id FROM services WHERE id = $1",
+      [service_id]
+    );
 
     if (serviceRes.rows.length === 0) {
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -79,10 +79,10 @@ export async function POST(request: Request) {
 
     const id = uuidv4();
 
-    await db.execute({
-      sql: `INSERT INTO service_offers (id, service_id, offer_price, branch_id, is_active) VALUES (?, ?, ?, ?, ?)`,
-      args: [id, service_id, offer_price, branch_id, is_active === undefined ? 1 : (is_active ? 1 : 0)]
-    });
+    await db.query(
+      `INSERT INTO service_offers (id, service_id, offer_price, branch_id, is_active) VALUES ($1, $2, $3, $4, $5)`,
+      [id, service_id, offer_price, branch_id, is_active === undefined ? 1 : (is_active ? 1 : 0)]
+    );
 
     return NextResponse.json({ success: true, id });
   } catch (error: any) {

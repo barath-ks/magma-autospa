@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const offers = await db.execute(`
+    const offers = await db.query(`
       SELECT 
         o.*, 
         b.name as branch_name 
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     const result = offerSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -72,15 +72,15 @@ export async function POST(request: Request) {
     // Check duplicate
     let existing;
     if (finalBranchId) {
-      existing = await db.execute({
-        sql: "SELECT id FROM offers WHERE name = ? AND branch_id = ?",
-        args: [name, finalBranchId]
-      });
+      existing = await db.query(
+        "SELECT id FROM offers WHERE name = $1 AND branch_id = $2",
+        [name, finalBranchId]
+      );
     } else {
-      existing = await db.execute({
-        sql: "SELECT id FROM offers WHERE name = ? AND branch_id IS NULL",
-        args: [name]
-      });
+      existing = await db.query(
+        "SELECT id FROM offers WHERE name = $1 AND branch_id IS NULL",
+        [name]
+      );
     }
 
     if (existing.rows.length > 0) {
@@ -88,15 +88,15 @@ export async function POST(request: Request) {
     }
 
     const id = uuidv4();
-    await db.execute({
-      sql: `INSERT INTO offers 
+    await db.query(
+      `INSERT INTO offers 
             (id, name, description, discount_type, discount_value, points_required, min_spend, start_date, end_date, branch_id, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      args: [
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)`,
+      [
         id, name, description || "", discount_type, discount_value || 0, points_required, 
         min_spend, start_date || null, end_date || null, finalBranchId
       ]
-    });
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

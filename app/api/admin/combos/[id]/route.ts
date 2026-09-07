@@ -25,22 +25,22 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
 
   try {
-    const res = await db.execute({
-      sql: `SELECT c.*, b.name as branch_name FROM combos c LEFT JOIN branches b ON c.branch_id = b.id WHERE c.id = ?`,
-      args: [id]
-    });
+    const res = await db.query(
+      `SELECT c.*, b.name as branch_name FROM combos c LEFT JOIN branches b ON c.branch_id = b.id WHERE c.id = $1`,
+      [id]
+    );
     
     if (res.rows.length === 0) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });
     }
     
-    const comboServices = await db.execute({
-      sql: `SELECT s.id as service_id, s.name as service_name
+    const comboServices = await db.query(
+      `SELECT s.id as service_id, s.name as service_name
             FROM combo_services cs
             JOIN services s ON cs.service_id = s.id
-            WHERE cs.combo_id = ?`,
-      args: [id]
-    });
+            WHERE cs.combo_id = $1`,
+      [id]
+    );
 
     return NextResponse.json({ combo: { ...res.rows[0], services: comboServices.rows } });
   } catch (error) {
@@ -63,7 +63,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const result = updateComboSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -71,7 +71,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       name, description, bundle_price, start_date, end_date, branch_id, is_active, service_ids 
     } = result.data;
 
-    const currentRes = await db.execute({ sql: "SELECT name, branch_id FROM combos WHERE id = ?", args: [id] });
+    const currentRes = await db.query("SELECT name, branch_id FROM combos WHERE id = $1", [id]);
     if (currentRes.rows.length === 0) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });
     }
@@ -83,15 +83,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (name !== undefined || branch_id !== undefined) {
       let existing;
       if (finalBranchId) {
-        existing = await db.execute({
-          sql: "SELECT id FROM combos WHERE name = ? AND branch_id = ? AND id != ?",
-          args: [finalName, finalBranchId, id]
-        });
+        existing = await db.query(
+          "SELECT id FROM combos WHERE name = $1 AND branch_id = $2 AND id != $3",
+          [finalName, finalBranchId, id]
+        );
       } else {
-        existing = await db.execute({
-          sql: "SELECT id FROM combos WHERE name = ? AND branch_id IS NULL AND id != ?",
-          args: [finalName, id]
-        });
+        existing = await db.query(
+          "SELECT id FROM combos WHERE name = $1 AND branch_id IS NULL AND id != $2",
+          [finalName, id]
+        );
       }
 
       if (existing.rows.length > 0) {
@@ -101,41 +101,46 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const updates = [];
     const args: any[] = [];
+    let pIdx = 1;
 
-    if (name !== undefined) { updates.push("name = ?"); args.push(name); }
-    if (description !== undefined) { updates.push("description = ?"); args.push(description); }
-    if (bundle_price !== undefined) { updates.push("bundle_price = ?"); args.push(bundle_price); }
-    if (start_date !== undefined) { updates.push("start_date = ?"); args.push(start_date || null); }
-    if (end_date !== undefined) { updates.push("end_date = ?"); args.push(end_date || null); }
-    if (branch_id !== undefined) { updates.push("branch_id = ?"); args.push(finalBranchId); }
-    if (is_active !== undefined) { updates.push("is_active = ?"); args.push(is_active ? 1 : 0); }
+    if (name !== undefined) { updates.push(`name = $${pIdx++}`); args.push(name); }
+    if (description !== undefined) { updates.push(`description = $${pIdx++}`); args.push(description); }
+    if (bundle_price !== undefined) { updates.push(`bundle_price = $${pIdx++}`); args.push(bundle_price); }
+    if (start_date !== undefined) { updates.push(`start_date = $${pIdx++}`); args.push(start_date || null); }
+    if (end_date !== undefined) { updates.push(`end_date = $${pIdx++}`); args.push(end_date || null); }
+    if (branch_id !== undefined) { updates.push(`branch_id = $${pIdx++}`); args.push(finalBranchId); }
+    if (is_active !== undefined) { updates.push(`is_active = $${pIdx++}`); args.push(is_active ? 1 : 0); }
 
-    const txn = await db.transaction("write");
+    const client = await db.connect();
 
     try {
+      await client.query("BEGIN");
+
       if (updates.length > 0) {
         args.push(id);
-        await txn.execute({
-          sql: `UPDATE combos SET ${updates.join(", ")} WHERE id = ?`,
-          args,
-        });
+        await client.query(
+          `UPDATE combos SET ${updates.join(", ")} WHERE id = $${pIdx}`,
+          args
+        );
       }
       
       if (service_ids) {
-        await txn.execute({ sql: "DELETE FROM combo_services WHERE combo_id = ?", args: [id] });
+        await client.query("DELETE FROM combo_services WHERE combo_id = $1", [id]);
         for (const svcId of service_ids) {
-          await txn.execute({
-            sql: "INSERT INTO combo_services (combo_id, service_id) VALUES (?, ?)",
-            args: [id, svcId]
-          });
+          await client.query(
+            "INSERT INTO combo_services (combo_id, service_id) VALUES ($1, $2)",
+            [id, svcId]
+          );
         }
       }
 
-      await txn.commit();
+      await client.query("COMMIT");
       return NextResponse.json({ success: true });
     } catch (txnErr) {
-      await txn.rollback();
+      await client.query("ROLLBACK");
       throw txnErr;
+    } finally {
+      client.release();
     }
   } catch (error) {
     console.error("Error updating combo:", error);
@@ -153,10 +158,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
 
   try {
-    await db.execute({
-      sql: "UPDATE combos SET is_active = 0 WHERE id = ?",
-      args: [id],
-    });
+    await db.query(
+      "UPDATE combos SET is_active = FALSE WHERE id = $1",
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

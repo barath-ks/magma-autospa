@@ -16,10 +16,10 @@ export async function POST(req: NextRequest) {
     const { userId, newLoginId, newPassword, requirePasswordChange } = await req.json();
     
     // Prevent editing admins
-    const targetUser = await db.execute({
-      sql: "SELECT role, password_hash FROM users WHERE id = ?",
-      args: [userId]
-    });
+    const targetUser = await db.query(
+      "SELECT role, password_hash FROM users WHERE id = $1",
+      [userId]
+    );
     
     if (!targetUser.rows.length || targetUser.rows[0].role === "admin") {
       return NextResponse.json({ error: "Cannot reset admin accounts or invalid user." }, { status: 403 });
@@ -35,18 +35,26 @@ export async function POST(req: NextRequest) {
     const mustChange = requirePasswordChange ? 1 : 0;
 
     // 2. Save it securely to the database alongside the must_change_password flag
-    await db.batch([
-      {
-        sql: "INSERT INTO password_history (id, user_id, password_hash) VALUES (?, ?, ?)",
-        args: [uuidv4(), userId, hashedPassword]
-      },
-      {
-        sql: `UPDATE users 
-              SET password_hash = ?, login_id = ?, must_change_password = ? 
-              WHERE id = ?`,
-        args: [hashedPassword, newLoginId, mustChange, userId]
-      }
-    ]);
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "INSERT INTO password_history (id, user_id, password_hash) VALUES ($1, $2, $3)",
+        [uuidv4(), userId, hashedPassword]
+      );
+      await client.query(
+        `UPDATE users 
+              SET password_hash = $1, login_id = $2, must_change_password = $3 
+              WHERE id = $4`,
+        [hashedPassword, newLoginId, mustChange, userId]
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

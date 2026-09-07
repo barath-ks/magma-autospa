@@ -13,13 +13,13 @@ export async function GET(request: Request) {
   const userId = session.user.id;
 
   try {
-    const result = await db.execute({
-      sql: `SELECT u.name, u.login_id, u.role, u.phone, u.email, b.name as branch_name 
+    const result = await db.query(
+      `SELECT u.name, u.login_id, u.role, u.phone, u.email, b.name as branch_name 
             FROM users u
             LEFT JOIN branches b ON u.branch_id = b.id
-            WHERE u.id = ?`,
-      args: [userId],
-    });
+            WHERE u.id = $1`,
+      [userId]
+    );
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -66,20 +66,20 @@ export async function PATCH(request: Request) {
     }
 
     // Check email uniqueness against other users
-    const existing = await db.execute({
-      sql: "SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1",
-      args: [cleanEmail, userId],
-    });
+    const existing = await db.query(
+      "SELECT id FROM users WHERE email = $1 AND id != $2 LIMIT 1",
+      [cleanEmail, userId]
+    );
 
     if (existing.rows.length > 0) {
       return NextResponse.json({ error: "This email address is already in use by another account" }, { status: 400 });
     }
 
     // Direct update
-    await db.execute({
-      sql: `UPDATE users SET phone = ?, email = ? WHERE id = ?`,
-      args: [phone ? String(phone).trim() : null, cleanEmail, userId],
-    });
+    await db.query(
+      `UPDATE users SET phone = $1, email = $2 WHERE id = $3`,
+      [phone ? String(phone).trim() : null, cleanEmail, userId]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

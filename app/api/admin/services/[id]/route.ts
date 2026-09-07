@@ -25,10 +25,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
 
   try {
-    const serviceRes = await db.execute({
-      sql: `SELECT s.*, b.name as branch_name FROM services s LEFT JOIN branches b ON s.branch_id = b.id WHERE s.id = ?`,
-      args: [id]
-    });
+    const serviceRes = await db.query(
+      `SELECT s.*, b.name as branch_name FROM services s LEFT JOIN branches b ON s.branch_id = b.id WHERE s.id = $1`,
+      [id]
+    );
     
     if (serviceRes.rows.length === 0) {
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -55,7 +55,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const result = updateServiceSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -63,7 +63,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     // We need to fetch the existing service to know its name and branch_id if they aren't provided in the patch,
     // in order to check for duplicate name collisions.
-    const currentRes = await db.execute({ sql: "SELECT name, branch_id FROM services WHERE id = ?", args: [id] });
+    const currentRes = await db.query("SELECT name, branch_id FROM services WHERE id = $1", [id]);
     if (currentRes.rows.length === 0) {
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
     }
@@ -76,15 +76,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (name !== undefined || branch_id !== undefined) {
       let existing;
       if (finalBranchId) {
-        existing = await db.execute({
-          sql: "SELECT id FROM services WHERE name = ? AND branch_id = ? AND id != ?",
-          args: [finalName, finalBranchId, id]
-        });
+        existing = await db.query(
+          "SELECT id FROM services WHERE name = $1 AND branch_id = $2 AND id != $3",
+          [finalName, finalBranchId, id]
+        );
       } else {
-        existing = await db.execute({
-          sql: "SELECT id FROM services WHERE name = ? AND branch_id IS NULL AND id != ?",
-          args: [finalName, id]
-        });
+        existing = await db.query(
+          "SELECT id FROM services WHERE name = $1 AND branch_id IS NULL AND id != $2",
+          [finalName, id]
+        );
       }
 
       if (existing.rows.length > 0) {
@@ -94,22 +94,23 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const updates = [];
     const args: any[] = [];
+    let pIdx = 1;
 
-    if (name !== undefined) { updates.push("name = ?"); args.push(name); }
-    if (branch_id !== undefined) { updates.push("branch_id = ?"); args.push(finalBranchId); }
-    if (price !== undefined) { updates.push("price = ?"); args.push(price); }
-    if (points_earned !== undefined) { updates.push("points_earned = ?"); args.push(points_earned); }
-    if (description !== undefined) { updates.push("description = ?"); args.push(description); }
-    if (category !== undefined) { updates.push("category = ?"); args.push(category); }
-    if (duration_minutes !== undefined) { updates.push("duration_minutes = ?"); args.push(duration_minutes); }
-    if (is_active !== undefined) { updates.push("is_active = ?"); args.push(is_active ? 1 : 0); }
+    if (name !== undefined) { updates.push(`name = $${pIdx++}`); args.push(name); }
+    if (branch_id !== undefined) { updates.push(`branch_id = $${pIdx++}`); args.push(finalBranchId); }
+    if (price !== undefined) { updates.push(`price = $${pIdx++}`); args.push(price); }
+    if (points_earned !== undefined) { updates.push(`points_earned = $${pIdx++}`); args.push(points_earned); }
+    if (description !== undefined) { updates.push(`description = $${pIdx++}`); args.push(description); }
+    if (category !== undefined) { updates.push(`category = $${pIdx++}`); args.push(category); }
+    if (duration_minutes !== undefined) { updates.push(`duration_minutes = $${pIdx++}`); args.push(duration_minutes); }
+    if (is_active !== undefined) { updates.push(`is_active = $${pIdx++}`); args.push(is_active ? 1 : 0); }
 
     if (updates.length > 0) {
       args.push(id);
-      await db.execute({
-        sql: `UPDATE services SET ${updates.join(", ")} WHERE id = ?`,
-        args,
-      });
+      await db.query(
+        `UPDATE services SET ${updates.join(", ")} WHERE id = $${pIdx}`,
+        args
+      );
     }
 
     return NextResponse.json({ success: true });
@@ -129,10 +130,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
 
   try {
-    await db.execute({
-      sql: "UPDATE services SET is_active = 0 WHERE id = ?",
-      args: [id],
-    });
+    await db.query(
+      "UPDATE services SET is_active = FALSE WHERE id = $1",
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

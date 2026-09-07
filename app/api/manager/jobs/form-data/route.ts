@@ -13,14 +13,27 @@ export async function GET(request: Request) {
   const branchId = (session.user as any).branch_id;
 
   try {
-    const servicesRes = await db.execute({
-      sql: `SELECT id, name, price FROM services WHERE is_active = 1 ORDER BY name ASC`
-    });
+    const servicesRes = await db.query(
+      `SELECT s.id, s.name, s.description, s.price, s.points_earned, s.category
+            FROM services s
+            WHERE (s.branch_id = $1 OR s.branch_id IS NULL) AND s.is_active = TRUE
+            ORDER BY s.category, s.name`,
+      [branchId]
+    );
 
-    const staffRes = await db.execute({
-      sql: `SELECT id, name FROM users WHERE branch_id = ? AND role = 'staff' AND is_active = 1 ORDER BY name ASC`,
-      args: [branchId]
-    });
+    const offersRes = await db.query(
+      `SELECT o.id, o.name, o.description, o.discount_type, o.discount_value, o.points_required, o.min_spend
+            FROM offers o
+            WHERE (o.branch_id = $1 OR o.branch_id IS NULL) 
+              AND o.is_active = TRUE
+            ORDER BY o.name`,
+      [branchId]
+    );
+
+    const staffRes = await db.query(
+      `SELECT id, name FROM users WHERE branch_id = $1 AND role = 'staff' AND is_active = TRUE ORDER BY name ASC`,
+      [branchId]
+    );
 
     return NextResponse.json({ 
       services: servicesRes.rows, 

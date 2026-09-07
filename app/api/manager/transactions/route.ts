@@ -7,8 +7,12 @@ import { v4 as uuidv4 } from "uuid";
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const role = (session.user as any).role;
-  if (!session || !session.user || (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff")) {
+  if (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -29,15 +33,15 @@ export async function POST(request: Request) {
     }
 
     // 2. Validate customer branch and vehicle
-    const customerRes = await db.execute({
-      sql: `
+    const customerRes = await db.query(
+      `
         SELECT c.branch_id, v.vehicle_number, v.vehicle_model
         FROM customers c
-        LEFT JOIN vehicles v ON c.id = v.customer_id AND v.id = ?
-        WHERE c.id = ?
+        LEFT JOIN vehicles v ON c.id = v.customer_id AND v.id = $1
+        WHERE c.id = $2
       `,
-      args: [vehicle_id, customer_id],
-    });
+      [vehicle_id, customer_id]
+    );
 
     if (customerRes.rows.length === 0) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
@@ -54,10 +58,10 @@ export async function POST(request: Request) {
     // 2b. Validate assigned_to branch if provided
     let finalAssignee = null;
     if (assigned_to) {
-      const staffRes = await db.execute({
-        sql: `SELECT branch_id FROM users WHERE id = ? AND role IN ('staff', 'manager', 'admin')`,
-        args: [assigned_to]
-      });
+      const staffRes = await db.query(
+        `SELECT branch_id FROM users WHERE id = $1 AND role IN ('staff', 'manager', 'admin')`,
+        [assigned_to]
+      );
       if (staffRes.rows.length === 0) {
         return NextResponse.json({ error: "Invalid assignee" }, { status: 400 });
       }
@@ -68,11 +72,8 @@ export async function POST(request: Request) {
     }
 
     // 3. Fetch all requested services in a single query
-    const placeholders = service_ids.map(() => '?').join(',');
-    const servicesRes = await db.execute({
-      sql: `SELECT id, name, price, points_earned, is_active FROM services WHERE id IN (${placeholders})`,
-      args: [...service_ids]
-    });
+    const placeholders = service_ids.map((_, i) => `$${i + 1}`).join(',');
+    const servicesRes = await db.query(`SELECT id, name, price, points_earned, is_active FROM services WHERE id IN (${placeholders})`, service_ids);
 
     const serviceMap = new Map();
     for (const s of servicesRes.rows) {
@@ -109,26 +110,31 @@ export async function POST(request: Request) {
     const pointsAwarded = projectedPoints;
     const transactionId = uuidv4();
 
-    // 6. DB Batch Insert
-    const batchStatements = [];
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
 
-    // Insert Transaction
-    batchStatements.push({
-      sql: `INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, payment_method, vehicle_id, vehicle_model, vehicle_number, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      args: [transactionId, customer_id, staffBranchId, finalAssignee, totalAmount, pointsAwarded, finalPaymentMethod, vehicle_id, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number],
-    });
+      // Insert Transaction
+      await client.query(`INSERT INTO transactions (id, customer_id, branch_id, staff_id, total_amount, points_awarded, status, payment_method, vehicle_id, vehicle_model, vehicle_number, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
+        [transactionId, customer_id, staffBranchId, finalAssignee, totalAmount, pointsAwarded, finalPaymentMethod, vehicle_id, customerRes.rows[0].vehicle_model, customerRes.rows[0].vehicle_number]
+      );
 
-    // Insert Transaction Services
-    for (const ts of servicesToInsert) {
-      batchStatements.push({
-        sql: `INSERT INTO transaction_services (id, transaction_id, service_id, price_at_time, points_at_time)
-              VALUES (?, ?, ?, ?, ?)`,
-        args: [ts.id, transactionId, ts.service_id, ts.price_at_time, ts.points_at_time],
-      });
+      // Insert Transaction Services
+      for (const ts of servicesToInsert) {
+        await client.query(`INSERT INTO transaction_services (id, transaction_id, service_id, price_at_time, points_at_time)
+              VALUES ($1, $2, $3, $4, $5)`,
+          [ts.id, transactionId, ts.service_id, ts.price_at_time, ts.points_at_time]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
     }
-
-    await db.batch(batchStatements, "write");
 
     return NextResponse.json({ 
       success: true, 

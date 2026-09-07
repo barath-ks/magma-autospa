@@ -37,42 +37,45 @@ export async function GET(request: Request) {
   try {
     let whereClause = "";
     let args: any[] = [];
+    let paramIndex = 1;
 
     if (search.trim() !== "") {
       const searchTerm = `%${search}%`;
-      whereClause = "WHERE (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)";
+      whereClause = `WHERE (c.name LIKE $${paramIndex++} OR c.phone LIKE $${paramIndex++} OR c.email LIKE $${paramIndex++})`;
       args = [searchTerm, searchTerm, searchTerm];
     }
 
-    const countRes = await db.execute({
-      sql: `SELECT COUNT(*) as total FROM customers c ${whereClause}`,
-      args: args
-    });
+    const countRes = await db.query(
+      `SELECT COUNT(*) as total FROM customers c ${whereClause}`,
+      args
+    );
     
     const totalRecords = countRes.rows[0].total as number;
     const totalPages = Math.ceil(totalRecords / limit);
 
     // Append pagination args
+    const limitParam = `$${paramIndex++}`;
+    const offsetParam = `$${paramIndex++}`;
     args.push(limit, offset);
 
-    const result = await db.execute({
-      sql: `
+    const result = await db.query(
+      `
         SELECT 
           c.id, c.name, c.phone, c.email, c.created_at,
           COUNT(t.id) as total_visits,
           MAX(t.created_at) as last_visit,
           COALESCE(SUM(t.total_amount), 0) as total_spent,
-          GROUP_CONCAT(DISTINCT b.name) as branches_visited
+          STRING_AGG(DISTINCT b.name, ', ') as branches_visited
         FROM customers c
         LEFT JOIN transactions t ON c.id = t.customer_id AND t.status = 'finished'
         LEFT JOIN branches b ON t.branch_id = b.id
         ${whereClause}
         GROUP BY c.id
         ORDER BY ${safeSortBy} ${safeSortOrder}
-        LIMIT ? OFFSET ?
+        LIMIT ${limitParam} OFFSET ${offsetParam}
       `,
-      args: args,
-    });
+      args
+    );
 
     return NextResponse.json({ 
       customers: result.rows,

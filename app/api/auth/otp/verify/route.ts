@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@libsql/client";
+import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-
-const db = createClient({
-  url: process.env.LIBSQL_URL || "file:local.db",
-});
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,10 +11,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Login ID and Phone OTP are required" }, { status: 400 });
     }
 
-    const userRes = await db.execute({
-      sql: "SELECT id, role FROM users WHERE login_id = ?",
-      args: [login_id],
-    });
+    const userRes = await db.query(
+      "SELECT id, role FROM users WHERE login_id = $1",
+      [login_id]
+    );
 
     if (userRes.rows.length === 0) {
       return NextResponse.json({ error: "Invalid login ID or OTP" }, { status: 400 });
@@ -31,13 +27,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify Phone OTP
-    const phoneOtpRes = await db.execute({
-      sql: `SELECT id, code_hash, expires_at 
+    const phoneOtpRes = await db.query(
+      `SELECT id, code_hash, expires_at 
             FROM otp_codes 
-            WHERE user_id = ? AND channel = 'phone' AND used = 0 AND purpose = 'password_reset'
+            WHERE user_id = $1 AND channel = 'phone' AND used = 0 AND purpose = 'password_reset'
             ORDER BY created_at DESC LIMIT 1`,
-      args: [user.id]
-    });
+      [user.id]
+    );
 
     if (phoneOtpRes.rows.length === 0) {
       return NextResponse.json({ error: "Invalid or expired Phone OTP" }, { status: 400 });
@@ -57,13 +53,13 @@ export async function POST(req: NextRequest) {
 
     // Verify Email OTP for Admin
     if (user.role === 'admin') {
-      const emailOtpRes = await db.execute({
-        sql: `SELECT id, code_hash, expires_at 
+      const emailOtpRes = await db.query(
+        `SELECT id, code_hash, expires_at 
               FROM otp_codes 
-              WHERE user_id = ? AND channel = 'email' AND used = 0 AND purpose = 'password_reset'
+              WHERE user_id = $1 AND channel = 'email' AND used = 0 AND purpose = 'password_reset'
               ORDER BY created_at DESC LIMIT 1`,
-        args: [user.id]
-      });
+        [user.id]
+      );
 
       if (emailOtpRes.rows.length === 0) {
         return NextResponse.json({ error: "Invalid or expired Email OTP" }, { status: 400 });
@@ -81,16 +77,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark as used
-    await db.execute({
-      sql: "UPDATE otp_codes SET used = 1 WHERE id = ?",
-      args: [phoneCodeData.id]
-    });
+    await db.query(
+      "UPDATE otp_codes SET used = 1 WHERE id = $1",
+      [phoneCodeData.id]
+    );
 
     if (emailCodeData) {
-      await db.execute({
-        sql: "UPDATE otp_codes SET used = 1 WHERE id = ?",
-        args: [emailCodeData.id]
-      });
+      await db.query(
+        "UPDATE otp_codes SET used = 1 WHERE id = $1",
+        [emailCodeData.id]
+      );
     }
 
     // Generate a temporary reset token (valid for 10 minutes)
@@ -100,10 +96,10 @@ export async function POST(req: NextRequest) {
     const resetId = crypto.randomUUID();
 
     // Use existing password_resets table logic for the final stage
-    await db.execute({
-      sql: "INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
-      args: [resetId, user.id, tokenHash, expiresAt],
-    });
+    await db.query(
+      "INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
+      [resetId, user.id, tokenHash, expiresAt]
+    );
 
     return NextResponse.json({ 
       success: true,

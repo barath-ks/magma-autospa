@@ -20,10 +20,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
     }
 
-    const offerRes = await db.execute({
-      sql: `SELECT branch_id FROM service_offers WHERE id = ?`,
-      args: [id]
-    });
+    const offerRes = await db.query(
+      `SELECT branch_id FROM service_offers WHERE id = $1`,
+      [id]
+    );
 
     if (offerRes.rows.length === 0) {
       return NextResponse.json({ error: "Service offer not found" }, { status: 404 });
@@ -34,10 +34,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     // Reactivate
-    await db.execute({
-      sql: `UPDATE service_offers SET is_active = 1 WHERE id = ?`,
-      args: [id],
-    });
+    await db.query(
+      `UPDATE service_offers SET is_active = TRUE WHERE id = $1`,
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

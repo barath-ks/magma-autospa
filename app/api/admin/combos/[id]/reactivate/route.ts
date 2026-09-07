@@ -20,10 +20,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
     }
 
-    const comboRes = await db.execute({
-      sql: `SELECT branch_id FROM combos WHERE id = ?`,
-      args: [id]
-    });
+    const comboRes = await db.query(
+      `SELECT branch_id FROM combos WHERE id = $1`,
+      [id]
+    );
 
     if (comboRes.rows.length === 0) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });
@@ -34,10 +34,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     // Reactivate
-    await db.execute({
-      sql: `UPDATE combos SET is_active = 1 WHERE id = ?`,
-      args: [id],
-    });
+    await db.query(
+      `UPDATE combos SET is_active = TRUE WHERE id = $1`,
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -34,10 +34,10 @@ export const authOptions: NextAuthOptions = {
           // ==========================================
           if (portal === "branch") {
             // Boundary Guard: Check if credential belongs to a corporate user
-            const userCheck = await db.execute({
-              sql: `SELECT role, name FROM users WHERE (login_id = ? COLLATE NOCASE OR email = ? COLLATE NOCASE) AND is_active = 1 LIMIT 1`,
-              args: [identifier, identifier],
-            });
+            const userCheck = await db.query(
+              `SELECT role, name FROM users WHERE (LOWER(login_id) = LOWER($1) OR LOWER(email) = LOWER($2)) AND is_active = TRUE LIMIT 1`,
+              [identifier, identifier]
+            );
             if (userCheck.rows.length > 0) {
               const corporateRole = userCheck.rows[0].role;
               const targetPortal = corporateRole === "admin" ? "/admin/login" : "/manager/login";
@@ -47,13 +47,13 @@ export const authOptions: NextAuthOptions = {
             }
 
             // Authenticate strictly against branches table
-            const branchRes = await db.execute({
-              sql: `SELECT * FROM branches 
-                    WHERE (email = ? COLLATE NOCASE OR branch_code = ? COLLATE NOCASE OR code = ? COLLATE NOCASE) 
-                      AND is_active = 1 
+            const branchRes = await db.query(
+              `SELECT * FROM branches 
+                    WHERE (LOWER(email) = LOWER($1) OR LOWER(branch_code) = LOWER($2) OR LOWER(code) = LOWER($3)) 
+                      AND is_active = TRUE 
                     LIMIT 1`,
-              args: [identifier, identifier, identifier],
-            });
+              [identifier, identifier, identifier]
+            );
 
             if (branchRes.rows.length === 0) {
               throw new Error("INVALID_CREDENTIALS: No active branch profile found matching these credentials.");
@@ -88,10 +88,10 @@ export const authOptions: NextAuthOptions = {
           // ==========================================
           if (portal === "admin") {
             // Boundary Guard: Check if credential belongs to a branch profile
-            const branchCheck = await db.execute({
-              sql: `SELECT name FROM branches WHERE (email = ? COLLATE NOCASE OR branch_code = ? COLLATE NOCASE OR code = ? COLLATE NOCASE) AND is_active = 1 LIMIT 1`,
-              args: [identifier, identifier, identifier],
-            });
+            const branchCheck = await db.query(
+              `SELECT name FROM branches WHERE (LOWER(email) = LOWER($1) OR LOWER(branch_code) = LOWER($2) OR LOWER(code) = LOWER($3)) AND is_active = TRUE LIMIT 1`,
+              [identifier, identifier, identifier]
+            );
             if (branchCheck.rows.length > 0) {
               throw new Error(
                 "PORTAL_MISMATCH: Branch floor profiles cannot access the Executive Admin Portal. Please sign in via the Branch Portal (/branch/login)."
@@ -100,10 +100,10 @@ export const authOptions: NextAuthOptions = {
 
             // Authenticate strictly against users table for role='admin'
             console.log(`[AUTH-DEBUG] Admin portal lookup for identifier: '${identifier}'`);
-            const userRes = await db.execute({
-              sql: `SELECT * FROM users WHERE (login_id = ? COLLATE NOCASE OR email = ? COLLATE NOCASE) AND is_active = 1 LIMIT 1`,
-              args: [identifier, identifier],
-            });
+            const userRes = await db.query(
+              `SELECT * FROM users WHERE (LOWER(login_id) = LOWER($1) OR LOWER(email) = LOWER($2)) AND is_active = TRUE LIMIT 1`,
+              [identifier, identifier]
+            );
             console.log(`[AUTH-DEBUG] Admin portal found rows:`, userRes.rows.length);
 
             if (userRes.rows.length === 0) {
@@ -139,10 +139,10 @@ export const authOptions: NextAuthOptions = {
           // ==========================================
           if (portal === "manager") {
             // Boundary Guard: Check if credential belongs to a branch profile
-            const branchCheck = await db.execute({
-              sql: `SELECT name FROM branches WHERE (email = ? COLLATE NOCASE OR branch_code = ? COLLATE NOCASE OR code = ? COLLATE NOCASE) AND is_active = 1 LIMIT 1`,
-              args: [identifier, identifier, identifier],
-            });
+            const branchCheck = await db.query(
+              `SELECT name FROM branches WHERE (LOWER(email) = LOWER($1) OR LOWER(branch_code) = LOWER($2) OR LOWER(code) = LOWER($3)) AND is_active = TRUE LIMIT 1`,
+              [identifier, identifier, identifier]
+            );
             if (branchCheck.rows.length > 0) {
               throw new Error(
                 "PORTAL_MISMATCH: Branch floor profiles cannot access the Manager Portal. Please sign in via the Branch Portal (/branch/login)."
@@ -150,10 +150,10 @@ export const authOptions: NextAuthOptions = {
             }
 
             // Authenticate against users table where role IN ('manager', 'admin')
-            const userRes = await db.execute({
-              sql: `SELECT * FROM users WHERE (login_id = ? COLLATE NOCASE OR email = ? COLLATE NOCASE) AND is_active = 1 LIMIT 1`,
-              args: [identifier, identifier],
-            });
+            const userRes = await db.query(
+              `SELECT * FROM users WHERE (LOWER(login_id) = LOWER($1) OR LOWER(email) = LOWER($2)) AND is_active = TRUE LIMIT 1`,
+              [identifier, identifier]
+            );
 
             if (userRes.rows.length === 0) {
               throw new Error("INVALID_CREDENTIALS: No management account found matching these credentials.");
@@ -187,13 +187,13 @@ export const authOptions: NextAuthOptions = {
           // 4. UNIFIED GATEWAY (No Portal Specified)
           // ==========================================
           // Check branches first
-          const branchRes = await db.execute({
-            sql: `SELECT * FROM branches 
-                  WHERE (email = ? COLLATE NOCASE OR branch_code = ? COLLATE NOCASE OR code = ? COLLATE NOCASE) 
-                    AND is_active = 1 
+          const branchRes = await db.query(
+            `SELECT * FROM branches 
+                  WHERE (LOWER(email) = LOWER($1) OR LOWER(branch_code) = LOWER($2) OR LOWER(code) = LOWER($3)) 
+                    AND is_active = TRUE 
                   LIMIT 1`,
-            args: [identifier, identifier, identifier],
-          });
+            [identifier, identifier, identifier]
+          );
 
           if (branchRes.rows.length > 0) {
             const branch: any = branchRes.rows[0];
@@ -217,14 +217,14 @@ export const authOptions: NextAuthOptions = {
           }
 
           // Check corporate users (manager or admin)
-          const userRes = await db.execute({
-            sql: `SELECT * FROM users 
-                  WHERE (login_id = ? COLLATE NOCASE OR email = ? COLLATE NOCASE) 
-                    AND is_active = 1 
+          const userRes = await db.query(
+            `SELECT * FROM users 
+                  WHERE (LOWER(login_id) = LOWER($1) OR LOWER(email) = LOWER($2)) 
+                    AND is_active = TRUE 
                     AND role IN ('manager', 'admin') 
                   LIMIT 1`,
-            args: [identifier, identifier],
-          });
+            [identifier, identifier]
+          );
 
           if (userRes.rows.length > 0) {
             const user: any = userRes.rows[0];
@@ -258,10 +258,10 @@ export const authOptions: NextAuthOptions = {
           token.must_change_password = session.must_change_password;
         } else if (token.role === "branch" && token.id) {
           try {
-            const b = await db.execute({
-              sql: "SELECT must_change_password FROM branches WHERE id = ? LIMIT 1",
-              args: [token.id as string],
-            });
+            const b = await db.query(
+              "SELECT must_change_password FROM branches WHERE id = $1 LIMIT 1",
+              [token.id as string]
+            );
             if (b.rows.length > 0) {
               token.must_change_password = Boolean(b.rows[0].must_change_password);
             }

@@ -23,10 +23,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "New password must be different from the current password." }, { status: 400 });
     }
 
-    const branchRes = await db.execute({
-      sql: "SELECT password_hash FROM branches WHERE id = ? AND is_active = 1",
-      args: [session.user.id],
-    });
+    const branchRes = await db.query(
+      "SELECT password_hash FROM branches WHERE id = $1 AND is_active = TRUE",
+      [session.user.id]
+    );
 
     if (!branchRes.rows.length) {
       return NextResponse.json({ error: "Branch profile not found." }, { status: 404 });
@@ -46,14 +46,14 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update branch password_hash, display_password, and clear must_change_password
-    await db.execute({
-      sql: `UPDATE branches 
-            SET password_hash = ?, 
-                display_password = ?, 
+    await db.query(
+      `UPDATE branches 
+            SET password_hash = $1, 
+                display_password = $2, 
                 must_change_password = 0 
-            WHERE id = ?`,
-      args: [hashedPassword, newPassword, session.user.id],
-    });
+            WHERE id = $3`,
+      [hashedPassword, newPassword, session.user.id]
+    );
 
     return NextResponse.json({ 
       success: true, 

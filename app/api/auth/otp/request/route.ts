@@ -22,10 +22,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Login ID is required" }, { status: 400 });
     }
 
-    const userRes = await db.execute({
-      sql: "SELECT id, name, role, phone, email FROM users WHERE login_id = ?",
-      args: [login_id],
-    });
+    const userRes = await db.query(
+      "SELECT id, name, role, phone, email FROM users WHERE login_id = $1",
+      [login_id]
+    );
 
     if (userRes.rows.length === 0) {
       return NextResponse.json({ message: "If that ID is registered, an OTP was sent." });
@@ -48,15 +48,15 @@ export async function POST(req: NextRequest) {
     const otpId = crypto.randomUUID();
 
     // Invalidate existing unused password_reset OTPs
-    await db.execute({
-      sql: `UPDATE otp_codes SET used = 1 WHERE user_id = ? AND purpose = 'password_reset' AND used = 0`,
-      args: [user.id],
-    });
+    await db.query(
+      `UPDATE otp_codes SET used = 1 WHERE user_id = $1 AND purpose = 'password_reset' AND used = 0`,
+      [user.id]
+    );
 
-    await db.execute({
-      sql: `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at, used) VALUES (?, ?, 'email', ?, 'password_reset', ?, 0)`,
-      args: [otpId, user.id, otpHash, expiresAt],
-    });
+    await db.query(
+      `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at, used) VALUES ($1, $2, 'email', $3, 'password_reset', $4, 0)`,
+      [otpId, user.id, otpHash, expiresAt]
+    );
 
     // Send OTP via unified email service
     await sendOtpEmail(emailStr, otp, {

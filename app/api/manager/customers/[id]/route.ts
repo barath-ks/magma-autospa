@@ -23,10 +23,10 @@ export async function GET(
   try {
     const { id } = await params;
     
-    const customerResult = await db.execute({
-      sql: `SELECT * FROM customers WHERE id = ? ${isAdmin ? "" : "AND branch_id = ?"}`,
-      args: isAdmin ? [id] : [id, branchId],
-    });
+    const customerResult = await db.query(
+      `SELECT * FROM customers WHERE id = $1 ${isAdmin ? "" : "AND branch_id = $2"}`,
+      isAdmin ? [id] : [id, branchId]
+    );
 
     if (customerResult.rows.length === 0) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
@@ -35,11 +35,11 @@ export async function GET(
     const customer = customerResult.rows[0];
 
     // Fetch visit history (transactions + services)
-    const historyResult = await db.execute({
-      sql: `
+    const historyResult = await db.query(
+      `
         SELECT t.id, t.created_at, t.total_amount, t.points_awarded, t.status, t.payment_method, t.vehicle_model, t.vehicle_number, u.name as staff_name, b.name as branch_name,
                (
-                 SELECT json_group_array(json_object('name', s.name, 'price', ts.price_at_time))
+                 SELECT COALESCE(json_agg(json_build_object('name', s.name, 'price', ts.price_at_time)), '[]'::json)
                  FROM transaction_services ts
                  JOIN services s ON ts.service_id = s.id
                  WHERE ts.transaction_id = t.id
@@ -47,43 +47,44 @@ export async function GET(
         FROM transactions t
         LEFT JOIN users u ON t.staff_id = u.id
         LEFT JOIN branches b ON t.branch_id = b.id
-        WHERE t.customer_id = ?
+        WHERE t.customer_id = $1
         ORDER BY t.created_at DESC
       `,
-      args: [id],
-    });
+      [id]
+    );
 
     const history = historyResult.rows.map(row => ({
       ...row,
-      services: JSON.parse((row as any).services || "[]")
+      services: typeof (row as any).services === 'string' ? JSON.parse((row as any).services) : ((row as any).services || [])
     }));
 
     // Fetch vehicles
-    const vehiclesResult = await db.execute({
-      sql: `SELECT * FROM vehicles WHERE customer_id = ? AND is_active = 1 ORDER BY created_at ASC`,
-      args: [id]
-    });
+    const vehiclesResult = await db.query(
+      `SELECT * FROM vehicles WHERE customer_id = $1 AND is_active = TRUE ORDER BY created_at ASC`,
+      [id]
+    );
 
     // Fetch ledger
-    const ledgerResult = await db.execute({
-      sql: `SELECT * FROM loyalty_points_ledger WHERE customer_id = ? ORDER BY created_at DESC`,
-      args: [id]
-    });
+    const ledgerResult = await db.query(
+      `SELECT * FROM loyalty_points_ledger WHERE customer_id = $1 ORDER BY created_at DESC`,
+      [id]
+    );
 
     let totalEarned = 0;
     let totalRedeemed = 0;
     ledgerResult.rows.forEach((row: any) => {
-      if (row.type === 'earned') totalEarned += row.points;
-      if (row.type === 'redeemed') totalRedeemed += row.points;
+      if (row.type === 'earned') totalEarned += Number(row.points);
+      if (row.type === 'redeemed') totalRedeemed += Number(row.points);
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       customer,
       vehicles: vehiclesResult.rows,
       history,
       ledger: ledgerResult.rows,
       stats: { totalEarned, totalRedeemed }
     });
+
   } catch (error) {
     console.error("Error fetching customer details:", error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -95,19 +96,21 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
+  
   if (!session || !session.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   const role = (session.user as any).role;
-  if (role !== "branch" && role !== "staff" && role !== "manager" && role !== "admin") {
+  if (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const isAdmin = role === "admin";
-  const branchId = (session.user as any).branch_id;
-  
+  const staffBranchId = (session.user as any).branch_id;
+  const { id } = await params;
+
   try {
-    const { id } = await params;
     const body = await request.json();
 
     // Check for protected fields being passed directly
@@ -132,10 +135,10 @@ export async function PATCH(
     const cleanPhone = phone.trim();
 
     // Check if phone belongs to another customer
-    const phoneConflict = await db.execute({
-      sql: `SELECT id, name FROM customers WHERE phone = ? AND id != ?`,
-      args: [cleanPhone, id]
-    });
+    const phoneConflict = await db.query(
+      `SELECT id, name FROM customers WHERE phone = $1 AND id != $2`,
+      [cleanPhone, id]
+    );
     if (phoneConflict.rows.length > 0) {
       const conflictingName = phoneConflict.rows[0].name;
       return NextResponse.json({ 
@@ -145,19 +148,19 @@ export async function PATCH(
 
     // Verify ownership for non-admin
     if (!isAdmin) {
-      const verifyRes = await db.execute({
-        sql: `SELECT id FROM customers WHERE id = ? AND branch_id = ?`,
-        args: [id, branchId]
-      });
+      const verifyRes = await db.query(
+        `SELECT id FROM customers WHERE id = $1 AND branch_id = $2`,
+        [id, staffBranchId]
+      );
       if (verifyRes.rows.length === 0) {
         return NextResponse.json({ error: "Forbidden: Customer belongs to another branch or does not exist." }, { status: 403 });
       }
     }
 
-    await db.execute({
-      sql: `UPDATE customers SET name = ?, phone = ?, email = ? WHERE id = ?`,
-      args: [name.trim(), cleanPhone, email ? email.trim() : null, id]
-    });
+    await db.query(
+      `UPDATE customers SET name = $1, phone = $2, email = $3 WHERE id = $4`,
+      [name.trim(), cleanPhone, email ? email.trim() : null, id]
+    );
 
     return NextResponse.json({ success: true, message: "Customer profile updated successfully." });
   } catch (error: any) {

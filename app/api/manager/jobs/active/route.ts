@@ -14,8 +14,8 @@ export async function GET(request: Request) {
   const branchId = (session.user as any).branch_id;
 
   try {
-    const result = await db.execute({
-      sql: `SELECT 
+    const result = await db.query(
+      `SELECT 
               t.id, 
               t.status, 
               t.total_amount,
@@ -36,10 +36,10 @@ export async function GET(request: Request) {
             FROM transactions t
             JOIN customers c ON t.customer_id = c.id
             LEFT JOIN users u ON t.staff_id = u.id
-            WHERE t.branch_id = ? AND t.status != 'finished'
+            WHERE t.branch_id = $1 AND t.status != 'finished'
             ORDER BY t.created_at ASC`,
-      args: [branchId],
-    });
+      [branchId]
+    );
 
     return NextResponse.json({ jobs: result.rows });
   } catch (error) {
@@ -73,10 +73,10 @@ export async function PATCH(request: Request) {
       : "cash";
 
     // 1. Fetch transaction to verify branch, current assignment, and points data
-    const result = await db.execute({
-      sql: `SELECT branch_id, staff_id, status, customer_id, points_awarded FROM transactions WHERE id = ?`,
-      args: [id],
-    });
+    const result = await db.query(
+      `SELECT branch_id, staff_id, status, customer_id, points_awarded FROM transactions WHERE id = $1`,
+      [id]
+    );
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
@@ -102,58 +102,61 @@ export async function PATCH(request: Request) {
     const isFinishingNow = status === 'finished' && transaction.status !== 'finished';
 
     // Execute update
-    const batchStatements = [];
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
 
-    let sql = `UPDATE transactions SET status = ?, staff_id = ?`;
-    const args: any[] = [status, newStaffId];
+      let sql = `UPDATE transactions SET status = $1, staff_id = $2`;
+      const args: any[] = [status, newStaffId];
+      let pIdx = 3;
 
-    if (isClaimingNow) {
-      sql += `, claimed_at = CURRENT_TIMESTAMP`;
-    }
-    if (isFinishingNow) {
-      sql += `, finished_at = CURRENT_TIMESTAMP, payment_method = ?`;
-      args.push(finalPaymentMethod);
-    }
-
-    sql += ` WHERE id = ?`;
-    args.push(id);
-    
-    batchStatements.push({ sql, args });
-
-    if (isFinishingNow) {
-      // Dynamically calculate points based on services
-      const pointsRes = await db.execute({
-        sql: `SELECT COALESCE(SUM(s.points_earned), 0) as total_points 
-              FROM transaction_services ts 
-              JOIN services s ON ts.service_id = s.id 
-              WHERE ts.transaction_id = ?`,
-        args: [id]
-      });
-      const totalPoints = Number(pointsRes.rows[0].total_points);
-
-      // Only award if there are points to give
-      if (totalPoints > 0) {
-        batchStatements.push({
-          sql: `UPDATE customers SET points_balance = points_balance + ? WHERE id = ?`,
-          args: [totalPoints, transaction.customer_id]
-        });
-        // Add ledger entry
-        batchStatements.push({
-          sql: `INSERT INTO loyalty_points_ledger (id, customer_id, type, points, related_transaction_id) VALUES (?, ?, 'earned', ?, ?)`,
-          args: [uuidv4(), transaction.customer_id, totalPoints, id]
-        });
-        // Update the transaction record so it accurately reflects awarded points
-        batchStatements.push({
-          sql: `UPDATE transactions SET points_awarded = ? WHERE id = ?`,
-          args: [totalPoints, id]
-        });
+      if (isClaimingNow) {
+        sql += `, claimed_at = CURRENT_TIMESTAMP`;
       }
-    }
+      if (isFinishingNow) {
+        sql += `, finished_at = CURRENT_TIMESTAMP, payment_method = $${pIdx++}`;
+        args.push(finalPaymentMethod);
+      }
 
-    if (batchStatements.length > 1) {
-      await db.batch(batchStatements, "write");
-    } else {
-      await db.execute(batchStatements[0]);
+      sql += ` WHERE id = $${pIdx++}`;
+      args.push(id);
+
+      await client.query(sql, args);
+
+      if (isFinishingNow) {
+        // Dynamically calculate points based on services
+        const pointsRes = await client.query(
+          `SELECT COALESCE(SUM(s.points_earned), 0) as total_points 
+                FROM transaction_services ts 
+                JOIN services s ON ts.service_id = s.id 
+                WHERE ts.transaction_id = $1`,
+          [id]
+        );
+        const totalPoints = Number(pointsRes.rows[0].total_points);
+
+        // Only award if there are points to give
+        if (totalPoints > 0) {
+          await client.query(
+            `UPDATE customers SET points_balance = points_balance + $1 WHERE id = $2`,
+            [totalPoints, transaction.customer_id]
+          );
+          await client.query(
+            `INSERT INTO loyalty_points_ledger (id, customer_id, type, points, related_transaction_id) VALUES ($1, $2, 'earned', $3, $4)`,
+            [uuidv4(), transaction.customer_id, totalPoints, id]
+          );
+          await client.query(
+            `UPDATE transactions SET points_awarded = $1 WHERE id = $2`,
+            [totalPoints, id]
+          );
+        }
+      }
+
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
     }
 
     return NextResponse.json({ success: true, staff_id: newStaffId });

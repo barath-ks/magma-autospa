@@ -11,10 +11,10 @@ import bcrypt from "bcryptjs";
  */
 export async function checkPasswordReuse(userId: string, newPlaintextPassword: string, currentHash?: string): Promise<boolean> {
   // Fetch historical hashes
-  const history = await db.execute({
-    sql: "SELECT password_hash FROM password_history WHERE user_id = ?",
-    args: [userId]
-  });
+  const history = await db.query(
+    "SELECT password_hash FROM password_history WHERE user_id = $1",
+    [userId]
+  );
   
   const hashes = history.rows.map(r => r.password_hash as string);
   

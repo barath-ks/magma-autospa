@@ -33,13 +33,13 @@ export async function POST(req: NextRequest) {
     const cleanIdentifier = identifier.trim();
 
     // Query user by username (login_id), phone, or email
-    const userRes = await db.execute({
-      sql: `SELECT id, login_id, name, phone, email, role, is_active 
+    const userRes = await db.query(
+      `SELECT id, login_id, name, phone, email, role, is_active 
             FROM users 
-            WHERE (login_id = ? OR phone = ? OR email = ?) AND is_active = 1 
+            WHERE (LOWER(login_id) = LOWER($1) OR phone = $2 OR LOWER(email) = LOWER($3)) AND is_active = TRUE 
             LIMIT 1`,
-      args: [cleanIdentifier, cleanIdentifier, cleanIdentifier],
-    });
+      [cleanIdentifier, cleanIdentifier, cleanIdentifier]
+    );
 
     if (userRes.rows.length === 0) {
       return NextResponse.json(
@@ -64,19 +64,19 @@ export async function POST(req: NextRequest) {
     const otpId = crypto.randomUUID();
 
     // Invalidate prior unused OTPs for this user
-    await db.execute({
-      sql: `UPDATE otp_codes 
+    await db.query(
+      `UPDATE otp_codes 
             SET used = 1 
-            WHERE user_id = ? AND purpose = 'password_reset' AND used = 0`,
-      args: [user.id],
-    });
+            WHERE user_id = $1 AND purpose = 'password_reset' AND used = 0`,
+      [user.id]
+    );
 
     // Save new OTP record (strictly email channel)
-    await db.execute({
-      sql: `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at, used) 
-            VALUES (?, ?, 'email', ?, 'password_reset', ?, 0)`,
-      args: [otpId, user.id, codeHash, expiresAt],
-    });
+    await db.query(
+      `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at, used) 
+            VALUES ($1, $2, 'email', $3, 'password_reset', $4, 0)`,
+      [otpId, user.id, codeHash, expiresAt]
+    );
 
     // Dispatch OTP exclusively via Email
     const emailSent = await sendOtpEmail(emailStr, otp, {

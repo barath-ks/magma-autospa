@@ -39,10 +39,10 @@ export async function POST(request: Request) {
     }
 
     // Check email uniqueness
-    const existingEmail = await db.execute({
-      sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
-      args: [cleanEmail],
-    });
+    const existingEmail = await db.query(
+      "SELECT id FROM users WHERE email = $1 LIMIT 1",
+      [cleanEmail]
+    );
 
     if (existingEmail.rows.length > 0) {
       return NextResponse.json({ error: "A user with this email address already exists" }, { status: 400 });
@@ -73,10 +73,10 @@ export async function POST(request: Request) {
 
     // Generate login_id
     const prefix = role === 'staff' ? 'MAG-' : 'MGR-';
-    const idResult = await db.execute({
-      sql: `SELECT login_id FROM users WHERE role = ? AND login_id LIKE ? ORDER BY login_id DESC LIMIT 1`,
-      args: [role, `${prefix}%`]
-    });
+    const idResult = await db.query(
+      `SELECT login_id FROM users WHERE role = $1 AND login_id LIKE $2 ORDER BY login_id DESC LIMIT 1`,
+      [role, `${prefix}%`]
+    );
 
     let nextNum = 1;
     if (idResult.rows.length > 0) {
@@ -93,11 +93,11 @@ export async function POST(request: Request) {
     const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
     const userId = crypto.randomUUID();
 
-    await db.execute({
-      sql: `INSERT INTO users (id, login_id, password_hash, role, name, email, phone, branch_id, must_change_password)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      args: [userId, newLoginId, tempPasswordHash, role, name, cleanEmail, phone || null, branch_id]
-    });
+    await db.query(
+      `INSERT INTO users (id, login_id, password_hash, role, name, email, phone, branch_id, must_change_password)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)`,
+      [userId, newLoginId, tempPasswordHash, role, name, cleanEmail, phone || null, branch_id]
+    );
 
     return NextResponse.json({ 
       success: true, 

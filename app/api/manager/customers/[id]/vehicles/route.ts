@@ -32,38 +32,35 @@ export async function POST(
 
     vehicle_number = vehicle_number.toUpperCase().trim();
 
-    // Verify branch isolation (customer must belong to manager's branch unless admin)
-    const customerRes = await db.execute({
-      sql: `SELECT branch_id FROM customers WHERE id = ?`,
-      args: [customerId]
-    });
+    // Verify customer exists
+    const customerRes = await db.query(
+      "SELECT id FROM customers WHERE id = $1",
+      [customerId]
+    );
 
     if (customerRes.rows.length === 0) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     }
 
-    if (role !== "admin" && customerRes.rows[0].branch_id !== staffBranchId) {
-      return NextResponse.json({ error: "Forbidden: Customer belongs to a different branch" }, { status: 403 });
-    }
+    const cleanVehicleNum = vehicle_number.toUpperCase().trim();
 
-    // Check plate uniqueness
-    const existingVehicle = await db.execute({
-      sql: "SELECT id FROM vehicles WHERE vehicle_number = ?",
-      args: [vehicle_number]
-    });
-    if (existingVehicle.rows.length > 0) {
-      return NextResponse.json({ 
-        error: `Vehicle plate ${vehicle_number} is already registered in the system.` 
-      }, { status: 409 });
+    // Check duplicate vehicle plate
+    const vehicleCheck = await db.query(
+      "SELECT id FROM vehicles WHERE vehicle_number = $1",
+      [cleanVehicleNum]
+    );
+
+    if (vehicleCheck.rows.length > 0) {
+      return NextResponse.json({ error: `Vehicle plate '${cleanVehicleNum}' is already registered in the system.` }, { status: 409 });
     }
 
     const vehicleId = uuidv4();
-    
-    await db.execute({
-      sql: `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_model, vehicle_make)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [vehicleId, customerId, vehicle_number, vehicle_type, vehicle_model || null, vehicle_make || null],
-    });
+
+    await db.query(
+      `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_make, vehicle_model) 
+            VALUES ($1, $2, $3, $4, $5, $6)`,
+      [vehicleId, customerId, cleanVehicleNum, vehicle_type || 'car', vehicle_make || null, vehicle_model || null]
+    );
 
     return NextResponse.json({ 
       id: vehicleId, 

@@ -11,10 +11,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await db.execute({
-      sql: `SELECT * FROM profile_change_requests WHERE user_id = ? ORDER BY requested_at DESC`,
-      args: [session.user.id],
-    });
+    const result = await db.query(
+      `SELECT * FROM profile_change_requests WHERE user_id = $1 ORDER BY requested_at DESC`,
+      [session.user.id]
+    );
 
     return NextResponse.json({ requests: result.rows });
   } catch (error) {
@@ -53,20 +53,20 @@ export async function POST(request: Request) {
     // If Admin, bypass request queue, verify uniqueness and apply directly
     if (role === 'admin') {
       if (field_type === 'login_id') {
-        const checkUnique = await db.execute({
-          sql: "SELECT id FROM users WHERE login_id = ?",
-          args: [requested_value]
-        });
+        const checkUnique = await db.query(
+          "SELECT id FROM users WHERE login_id = $1",
+          [requested_value]
+        );
 
         if (checkUnique.rows.length > 0) {
           return NextResponse.json({ error: "ID no longer available" }, { status: 400 });
         }
       }
 
-      await db.execute({
-        sql: `UPDATE users SET ${field_type} = ? WHERE id = ?`,
-        args: [requested_value, userId]
-      });
+      await db.query(
+        `UPDATE users SET ${field_type} = $1 WHERE id = $2`,
+        [requested_value, userId]
+      );
 
       return NextResponse.json({ success: true, directUpdate: true });
     }
@@ -74,11 +74,11 @@ export async function POST(request: Request) {
     // For Staff and Manager, create a pending request
     const id = crypto.randomUUID();
     
-    await db.execute({
-      sql: `INSERT INTO profile_change_requests (id, user_id, field_type, current_value, requested_value)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [id, userId, field_type, currentValue, requested_value],
-    });
+    await db.query(
+      `INSERT INTO profile_change_requests (id, user_id, field_type, current_value, requested_value)
+            VALUES ($1, $2, $3, $4, $5)`,
+      [id, userId, field_type, currentValue, requested_value]
+    );
 
     return NextResponse.json({ success: true, id });
   } catch (error: any) {

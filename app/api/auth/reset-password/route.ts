@@ -17,10 +17,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Retrieve reset session
-    const resetRes = await db.execute({
-      sql: "SELECT user_id, token_hash, expires_at FROM password_resets WHERE id = ?",
-      args: [reset_id],
-    });
+    const resetRes = await db.query(
+      "SELECT user_id, token_hash, expires_at FROM password_resets WHERE id = $1",
+      [reset_id]
+    );
 
     if (resetRes.rows.length === 0) {
       return NextResponse.json(
@@ -51,10 +51,10 @@ export async function POST(req: NextRequest) {
     const userId = resetRecord.user_id as string;
 
     // Fetch user details
-    const userRes = await db.execute({
-      sql: "SELECT id, login_id, role, password_hash FROM users WHERE id = ?",
-      args: [userId],
-    });
+    const userRes = await db.query(
+      "SELECT id, login_id, role, password_hash FROM users WHERE id = $1",
+      [userId]
+    );
 
     if (userRes.rows.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -86,20 +86,28 @@ export async function POST(req: NextRequest) {
     const historyId = uuidv4();
 
     // Execute atomic update: update user password, remove must_change_password flag, record history, and consume reset token
-    await db.batch([
-      {
-        sql: "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
-        args: [hashedPassword, userId],
-      },
-      {
-        sql: "INSERT INTO password_history (id, user_id, password_hash) VALUES (?, ?, ?)",
-        args: [historyId, userId, hashedPassword],
-      },
-      {
-        sql: "DELETE FROM password_resets WHERE id = ?",
-        args: [reset_id],
-      },
-    ]);
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "UPDATE users SET password_hash = $1, must_change_password = 0 WHERE id = $2",
+        [hashedPassword, userId]
+      );
+      await client.query(
+        "INSERT INTO password_history (id, user_id, password_hash) VALUES ($1, $2, $3)",
+        [historyId, userId, hashedPassword]
+      );
+      await client.query(
+        "DELETE FROM password_resets WHERE id = $1",
+        [reset_id]
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
     return NextResponse.json({
       success: true,

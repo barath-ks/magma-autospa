@@ -25,37 +25,34 @@ export async function GET(request: Request) {
   try {
     // If admin and no branch is requested, return all active offers
     if (role === "admin" && !effectiveBranch) {
-      const res = await db.execute({
-        sql: `SELECT * FROM offers WHERE is_active = 1 ORDER BY points_required ASC`,
-        args: [],
-      });
+      const res = await db.query(`SELECT * FROM offers WHERE is_active = TRUE ORDER BY points_required ASC`, []);
       return NextResponse.json({ offers: res.rows });
     }
 
     // If an effective branch is identified, normalize across ID, Name, Code, and Slug
     if (effectiveBranch) {
       const variants = await getBranchVariants(effectiveBranch);
-      const placeholders = variants.map(() => "?").join(", ");
+      const placeholders = variants.map((_, idx) => `$${idx + 1}`).join(", ");
 
-      const res = await db.execute({
-        sql: `SELECT * FROM offers 
-              WHERE is_active = 1 
+      const res = await db.query(
+        `SELECT * FROM offers 
+              WHERE is_active = TRUE 
                 AND (branch_id IS NULL OR branch_id = '' OR branch_id IN (${placeholders}))
               ORDER BY points_required ASC`,
-        args: variants,
-      });
+        variants
+      );
 
       return NextResponse.json({ offers: res.rows });
     }
 
     // Fallback: global offers only
-    const res = await db.execute({
-      sql: `SELECT * FROM offers 
-            WHERE is_active = 1 
+    const res = await db.query(
+      `SELECT * FROM offers 
+            WHERE is_active = TRUE 
               AND (branch_id IS NULL OR branch_id = '') 
             ORDER BY points_required ASC`,
-      args: [],
-    });
+      []
+    );
 
     return NextResponse.json({ offers: res.rows });
   } catch (error) {

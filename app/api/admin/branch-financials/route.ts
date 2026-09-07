@@ -18,12 +18,12 @@ export async function GET(request: Request) {
   let dateFilterExpenses = "";
 
   if (range !== "all") {
-    let dateModifier = "'-1 month'";
-    if (range === "week") dateModifier = "'-7 days'";
-    if (range === "year") dateModifier = "'-1 year'";
+    let intervalStr = "1 month";
+    if (range === "week") intervalStr = "7 days";
+    if (range === "year") intervalStr = "1 year";
     
-    dateFilterTransactions = `AND t.created_at >= datetime('now', ${dateModifier})`;
-    dateFilterExpenses = `AND e.created_at >= datetime('now', ${dateModifier})`;
+    dateFilterTransactions = `AND t.created_at >= NOW() - INTERVAL '${intervalStr}'`;
+    dateFilterExpenses = `AND e.created_at >= NOW() - INTERVAL '${intervalStr}'`;
   }
 
   try {
@@ -44,13 +44,13 @@ export async function GET(request: Request) {
     
     const args: any[] = [];
     if (branchId) {
-      sql += ` WHERE b.id = ? `;
+      sql += ` WHERE b.id = $1 `;
       args.push(branchId);
     }
     
     sql += ` GROUP BY b.id, b.name ORDER BY b.name ASC`;
 
-    const res = await db.execute({ sql, args });
+    const res = await db.query(sql, args);
 
     const financials = res.rows.map((row: any) => ({
       branch_id: row.branch_id,

@@ -10,14 +10,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await db.execute({
-      sql: `SELECT req.*, u.role 
+    const result = await db.query(
+      `SELECT req.*, u.role 
             FROM profile_change_requests req
             JOIN users u ON req.user_id = u.id
             WHERE u.role = 'manager' AND req.status = 'pending'
             ORDER BY req.requested_at ASC`,
-      args: [],
-    });
+      []
+    );
 
     return NextResponse.json({ requests: result.rows });
   } catch (error) {
@@ -48,13 +48,13 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Note is required for rejection" }, { status: 400 });
     }
 
-    const checkResult = await db.execute({
-      sql: `SELECT req.requested_value, req.field_type, req.user_id, u.role
+    const checkResult = await db.query(
+      `SELECT req.requested_value, req.field_type, req.user_id, u.role
             FROM profile_change_requests req
             JOIN users u ON req.user_id = u.id
-            WHERE req.id = ?`,
-      args: [id]
-    });
+            WHERE req.id = $1`,
+      [id]
+    );
 
     if (checkResult.rows.length === 0) {
       return NextResponse.json({ error: "Request not found" }, { status: 404 });
@@ -70,43 +70,43 @@ export async function PATCH(request: Request) {
     if (status === 'approved') {
       // Uniqueness check for login_id
       if (targetUser.field_type === 'login_id') {
-        const uniqueCheck = await db.execute({
-          sql: "SELECT id FROM users WHERE login_id = ?",
-          args: [targetUser.requested_value]
-        });
+        const uniqueCheck = await db.query(
+          "SELECT id FROM users WHERE login_id = $1",
+          [targetUser.requested_value]
+        );
 
         if (uniqueCheck.rows.length > 0) {
           // Auto-reject
-          await db.execute({
-            sql: `UPDATE profile_change_requests 
-                  SET status = 'rejected', reviewer_note = 'ID no longer available', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
-                  WHERE id = ?`,
-            args: [adminId, id],
-          });
+          await db.query(
+            `UPDATE profile_change_requests 
+                  SET status = 'rejected', reviewer_note = 'ID no longer available', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP
+                  WHERE id = $2`,
+            [adminId, id]
+          );
           return NextResponse.json({ success: true, auto_rejected: true, message: "ID was taken; request auto-rejected." });
         }
       }
 
-      await db.execute({
-        sql: `UPDATE users SET ${targetUser.field_type} = ? WHERE id = ?`,
-        args: [targetUser.requested_value, targetUser.user_id],
-      });
+      await db.query(
+        `UPDATE users SET ${targetUser.field_type} = $1 WHERE id = $2`,
+        [targetUser.requested_value, targetUser.user_id]
+      );
       
-      await db.execute({
-        sql: `UPDATE profile_change_requests 
-              SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
-              WHERE id = ?`,
-        args: [adminId, id],
-      });
+      await db.query(
+        `UPDATE profile_change_requests 
+              SET status = 'approved', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP
+              WHERE id = $2`,
+        [adminId, id]
+      );
       
     } else {
       // Rejection
-      await db.execute({
-        sql: `UPDATE profile_change_requests 
-              SET status = 'rejected', reviewer_note = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
-              WHERE id = ?`,
-        args: [reviewer_note, adminId, id],
-      });
+      await db.query(
+        `UPDATE profile_change_requests 
+              SET status = 'rejected', reviewer_note = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP
+              WHERE id = $3`,
+        [reviewer_note, adminId, id]
+      );
     }
 
     return NextResponse.json({ success: true });

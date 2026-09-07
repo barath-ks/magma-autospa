@@ -31,12 +31,12 @@ export async function POST(request: Request) {
     }
 
     // 1. Verify OTP
-    const otpRes = await db.execute({
-      sql: `SELECT id, code_hash, used, expires_at FROM customer_otp_codes 
-            WHERE customer_id = ? AND purpose = 'redemption' 
+    const otpRes = await db.query(
+      `SELECT id, code_hash, used, expires_at FROM customer_otp_codes 
+            WHERE customer_id = $1 AND purpose = 'redemption' 
             ORDER BY created_at DESC LIMIT 1`,
-      args: [customer_id],
-    });
+      [customer_id]
+    );
 
     if (otpRes.rows.length === 0) {
       return NextResponse.json({ error: "No OTP request found for this customer." }, { status: 400 });
@@ -58,10 +58,10 @@ export async function POST(request: Request) {
     }
 
     // 2. Pre-checks (Customer, Offer, Points)
-    const customerRes = await db.execute({
-      sql: `SELECT points_balance, branch_id, name, phone, email FROM customers WHERE id = ?`,
-      args: [customer_id],
-    });
+    const customerRes = await db.query(
+      `SELECT points_balance, branch_id, name, phone, email FROM customers WHERE id = $1`,
+      [customer_id]
+    );
 
     if (customerRes.rows.length === 0) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
@@ -75,10 +75,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const offerRes = await db.execute({
-      sql: `SELECT name, points_required, branch_id, is_active FROM offers WHERE id = ?`,
-      args: [offer_id],
-    });
+    const offerRes = await db.query(
+      `SELECT name, points_required, branch_id, is_active FROM offers WHERE id = $1`,
+      [offer_id]
+    );
 
     if (offerRes.rows.length === 0) {
       return NextResponse.json({ error: "Offer not found" }, { status: 404 });
@@ -106,28 +106,30 @@ export async function POST(request: Request) {
     const redemptionId = crypto.randomUUID();
     const redemptionBranchId = staffBranchId || (customer.branch_id as string);
 
-    const txn = await db.transaction("write");
+    const client = await db.connect();
     let newBalance = 0;
 
     try {
-      // Mark OTP as used (safe against TOCTOU)
-      const otpUpdate = await txn.execute({
-        sql: `UPDATE customer_otp_codes SET used = 1 WHERE id = ? AND used = 0`,
-        args: [latestOtp.id],
-      });
+      await client.query("BEGIN");
+
+      // Mark OTP as used
+      const otpUpdate = await client.query(
+        `UPDATE customer_otp_codes SET used = 1 WHERE id = $1 AND used = 0`,
+        [latestOtp.id]
+      );
       
-      if (otpUpdate.rowsAffected === 0) {
+      if (otpUpdate.rowCount === 0) {
         throw new Error("OTP_ALREADY_USED");
       }
 
       // Decrement Points (Atomic safety check with points_balance >= requiredPoints)
-      const pointsUpdate = await txn.execute({
-        sql: `UPDATE customers 
-              SET points_balance = points_balance - ? 
-              WHERE id = ? AND points_balance >= ?
+      const pointsUpdate = await client.query(
+        `UPDATE customers 
+              SET points_balance = points_balance - $1 
+              WHERE id = $2 AND points_balance >= $3
               RETURNING points_balance`,
-        args: [requiredPoints, customer_id, requiredPoints],
-      });
+        [requiredPoints, customer_id, requiredPoints]
+      );
       
       if (pointsUpdate.rows.length === 0) {
         throw new Error("INSUFFICIENT_POINTS");
@@ -136,21 +138,21 @@ export async function POST(request: Request) {
       newBalance = Number(pointsUpdate.rows[0].points_balance);
 
       // Record Redemption
-      await txn.execute({
-        sql: `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [redemptionId, customer_id, redemptionBranchId, staffId, offer_id, requiredPoints],
-      });
+      await client.query(
+        `INSERT INTO redemptions (id, customer_id, branch_id, staff_id, offer_id, points_redeemed)
+              VALUES ($1, $2, $3, $4, $5, $6)`,
+        [redemptionId, customer_id, redemptionBranchId, staffId, offer_id, requiredPoints]
+      );
 
       // Ledger Entry
-      await txn.execute({
-        sql: `INSERT INTO loyalty_points_ledger (id, customer_id, type, points)
-              VALUES (?, ?, 'redeemed', ?)`,
-        args: [uuidv4(), customer_id, requiredPoints],
-      });
+      await client.query(
+        `INSERT INTO loyalty_points_ledger (id, customer_id, type, points)
+              VALUES ($1, $2, 'redeemed', $3)`,
+        [crypto.randomUUID(), customer_id, requiredPoints]
+      );
 
-      await txn.commit();
-      
+      await client.query("COMMIT");
+
       if (customer.email) {
         sendRedemptionConfirmationEmail(
           customer.email as string,
@@ -168,8 +170,15 @@ export async function POST(request: Request) {
           offer.name as string
         ).catch(err => console.error("[SMS ERROR] Background SMS failed:", err));
       }
+
+      return NextResponse.json({ 
+        success: true, 
+        new_balance: newBalance,
+        message: "Redemption successful" 
+      });
+
     } catch (txnError: any) {
-      await txn.rollback();
+      await client.query("ROLLBACK");
       if (txnError.message === "OTP_ALREADY_USED") {
         return NextResponse.json({ error: "This OTP was already used." }, { status: 400 });
       }
@@ -177,13 +186,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Insufficient points balance (or balance changed)." }, { status: 400 });
       }
       throw txnError;
+    } finally {
+      client.release();
     }
-
-    return NextResponse.json({ 
-      success: true, 
-      new_balance: newBalance,
-      message: "Redemption successful" 
-    });
 
   } catch (error) {
     console.error("Error processing redemption confirmation:", error);

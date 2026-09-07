@@ -26,10 +26,10 @@ export async function PATCH(
     const { vehicle_number, vehicle_type, vehicle_model, vehicle_make, is_active } = body;
 
     // Verify branch isolation (customer must belong to manager's branch unless admin)
-    const vehicleRes = await db.execute({
-      sql: `SELECT v.id, c.branch_id FROM vehicles v JOIN customers c ON v.customer_id = c.id WHERE v.id = ?`,
-      args: [vehicleId]
-    });
+    const vehicleRes = await db.query(
+      `SELECT v.id, c.branch_id FROM vehicles v JOIN customers c ON v.customer_id = c.id WHERE v.id = $1`,
+      [vehicleId]
+    );
 
     if (vehicleRes.rows.length === 0) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
@@ -45,30 +45,31 @@ export async function PATCH(
 
     if (vehicle_number !== undefined) {
       const vNum = vehicle_number.toUpperCase().trim();
-      const conflict = await db.execute({
-        sql: "SELECT id FROM vehicles WHERE vehicle_number = ? AND id != ?",
-        args: [vNum, vehicleId]
-      });
+      const conflict = await db.query(
+        "SELECT id FROM vehicles WHERE vehicle_number = $1 AND id != $2",
+        [vNum, vehicleId]
+      );
       if (conflict.rows.length > 0) {
         return NextResponse.json({ error: `Vehicle plate ${vNum} is already registered to another vehicle` }, { status: 409 });
       }
-      updates.push("vehicle_number = ?");
+      updates.push(`vehicle_number = $${args.length + 1}`);
       args.push(vNum);
     }
     if (vehicle_type !== undefined) {
-      updates.push("vehicle_type = ?");
+      updates.push(`vehicle_type = $${args.length + 1}`);
       args.push(vehicle_type);
     }
     if (vehicle_make !== undefined) {
-      updates.push("vehicle_make = ?");
+      updates.push(`vehicle_make = $${args.length + 1}`);
       args.push(vehicle_make || null);
     }
     if (vehicle_model !== undefined) {
-      updates.push("vehicle_model = ?");
+      updates.push(`vehicle_model = $${args.length + 1}`);
       args.push(vehicle_model || null);
     }
     if (is_active !== undefined) {
-      updates.push("is_active = ?");
+      /* SQLite flag: integer boolean is_active (1 or 0) */
+      updates.push(`is_active = $${args.length + 1}`);
       args.push(is_active ? 1 : 0);
     }
 
@@ -78,16 +79,16 @@ export async function PATCH(
 
     args.push(vehicleId);
 
-    await db.execute({
-      sql: `UPDATE vehicles SET ${updates.join(", ")} WHERE id = ?`,
-      args: args,
-    });
+    await db.query(
+      `UPDATE vehicles SET ${updates.join(", ")} WHERE id = $${args.length}`,
+      args
+    );
 
     return NextResponse.json({ success: true, message: "Vehicle updated successfully" });
 
   } catch (error: any) {
     console.error("Error updating vehicle:", error);
-    if (error.message && error.message.includes("UNIQUE constraint failed: vehicles.vehicle_number")) {
+    if (error.message && (error.message.includes("UNIQUE constraint failed: vehicles.vehicle_number") || error.code === "23505")) {
       return NextResponse.json({ error: "Vehicle number already exists in the system" }, { status: 400 });
     }
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -113,10 +114,10 @@ export async function DELETE(
   const { id: vehicleId } = await params;
 
   try {
-    const vehicleRes = await db.execute({
-      sql: `SELECT v.id, c.branch_id FROM vehicles v JOIN customers c ON v.customer_id = c.id WHERE v.id = ?`,
-      args: [vehicleId]
-    });
+    const vehicleRes = await db.query(
+      `SELECT v.id, c.branch_id FROM vehicles v JOIN customers c ON v.customer_id = c.id WHERE v.id = $1`,
+      [vehicleId]
+    );
 
     if (vehicleRes.rows.length === 0) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
@@ -126,10 +127,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden: Vehicle belongs to a customer in a different branch" }, { status: 403 });
     }
 
-    await db.execute({
-      sql: "DELETE FROM vehicles WHERE id = ?",
-      args: [vehicleId]
-    });
+    await db.query(
+      "DELETE FROM vehicles WHERE id = $1",
+      [vehicleId]
+    );
 
     return NextResponse.json({ success: true, message: "Vehicle removed successfully" });
   } catch (error) {

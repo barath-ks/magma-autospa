@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@libsql/client";
+import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
-
-const db = createClient({
-  url: process.env.LIBSQL_URL || "file:local.db",
-});
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,10 +11,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Retrieve user by login_id first
-    const userRes = await db.execute({
-      sql: "SELECT id FROM users WHERE login_id = ?",
-      args: [login_id],
-    });
+    const userRes = await db.query(
+      "SELECT id FROM users WHERE login_id = $1",
+      [login_id]
+    );
 
     if (userRes.rows.length === 0) {
       return NextResponse.json({ error: "Invalid user" }, { status: 400 });
@@ -27,10 +23,10 @@ export async function POST(req: NextRequest) {
     const userId = userRes.rows[0].id;
 
     // Verify reset token
-    const resetRes = await db.execute({
-      sql: "SELECT user_id, token_hash, expires_at FROM password_resets WHERE id = ?",
-      args: [reset_id],
-    });
+    const resetRes = await db.query(
+      "SELECT user_id, token_hash, expires_at FROM password_resets WHERE id = $1",
+      [reset_id]
+    );
 
     if (resetRes.rows.length === 0) {
       return NextResponse.json({ error: "Invalid or expired session" }, { status: 400 });
@@ -57,16 +53,16 @@ export async function POST(req: NextRequest) {
     const newPasswordHash = await bcrypt.hash(new_password, 10);
 
     // Update user
-    await db.execute({
-      sql: "UPDATE users SET password_hash = ? WHERE id = ?",
-      args: [newPasswordHash, userId],
-    });
+    await db.query(
+      "UPDATE users SET password_hash = $1 WHERE id = $2",
+      [newPasswordHash, userId]
+    );
 
     // Delete token
-    await db.execute({
-      sql: "DELETE FROM password_resets WHERE id = ?",
-      args: [reset_id],
-    });
+    await db.query(
+      "DELETE FROM password_resets WHERE id = $1",
+      [reset_id]
+    );
 
     return NextResponse.json({ success: true, message: "Password updated successfully" });
   } catch (error) {

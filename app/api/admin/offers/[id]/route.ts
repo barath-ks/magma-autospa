@@ -27,10 +27,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
 
   try {
-    const res = await db.execute({
-      sql: `SELECT o.*, b.name as branch_name FROM offers o LEFT JOIN branches b ON o.branch_id = b.id WHERE o.id = ?`,
-      args: [id]
-    });
+    const res = await db.query(
+      `SELECT o.*, b.name as branch_name FROM offers o LEFT JOIN branches b ON o.branch_id = b.id WHERE o.id = $1`,
+      [id]
+    );
     
     if (res.rows.length === 0) {
       return NextResponse.json({ error: "Offer not found" }, { status: 404 });
@@ -57,7 +57,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const result = updateOfferSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -66,7 +66,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       points_required, min_spend, start_date, end_date, branch_id, is_active 
     } = result.data;
 
-    const currentRes = await db.execute({ sql: "SELECT name, branch_id FROM offers WHERE id = ?", args: [id] });
+    const currentRes = await db.query("SELECT name, branch_id FROM offers WHERE id = $1", [id]);
     if (currentRes.rows.length === 0) {
       return NextResponse.json({ error: "Offer not found" }, { status: 404 });
     }
@@ -78,15 +78,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (name !== undefined || branch_id !== undefined) {
       let existing;
       if (finalBranchId) {
-        existing = await db.execute({
-          sql: "SELECT id FROM offers WHERE name = ? AND branch_id = ? AND id != ?",
-          args: [finalName, finalBranchId, id]
-        });
+        existing = await db.query(
+          "SELECT id FROM offers WHERE name = $1 AND branch_id = $2 AND id != $3",
+          [finalName, finalBranchId, id]
+        );
       } else {
-        existing = await db.execute({
-          sql: "SELECT id FROM offers WHERE name = ? AND branch_id IS NULL AND id != ?",
-          args: [finalName, id]
-        });
+        existing = await db.query(
+          "SELECT id FROM offers WHERE name = $1 AND branch_id IS NULL AND id != $2",
+          [finalName, id]
+        );
       }
 
       if (existing.rows.length > 0) {
@@ -96,24 +96,25 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const updates = [];
     const args: any[] = [];
+    let pIdx = 1;
 
-    if (name !== undefined) { updates.push("name = ?"); args.push(name); }
-    if (description !== undefined) { updates.push("description = ?"); args.push(description); }
-    if (discount_type !== undefined) { updates.push("discount_type = ?"); args.push(discount_type); }
-    if (discount_value !== undefined) { updates.push("discount_value = ?"); args.push(discount_value); }
-    if (points_required !== undefined) { updates.push("points_required = ?"); args.push(points_required); }
-    if (min_spend !== undefined) { updates.push("min_spend = ?"); args.push(min_spend); }
-    if (start_date !== undefined) { updates.push("start_date = ?"); args.push(start_date || null); }
-    if (end_date !== undefined) { updates.push("end_date = ?"); args.push(end_date || null); }
-    if (branch_id !== undefined) { updates.push("branch_id = ?"); args.push(finalBranchId); }
-    if (is_active !== undefined) { updates.push("is_active = ?"); args.push(is_active ? 1 : 0); }
+    if (name !== undefined) { updates.push(`name = $${pIdx++}`); args.push(name); }
+    if (description !== undefined) { updates.push(`description = $${pIdx++}`); args.push(description); }
+    if (discount_type !== undefined) { updates.push(`discount_type = $${pIdx++}`); args.push(discount_type); }
+    if (discount_value !== undefined) { updates.push(`discount_value = $${pIdx++}`); args.push(discount_value); }
+    if (points_required !== undefined) { updates.push(`points_required = $${pIdx++}`); args.push(points_required); }
+    if (min_spend !== undefined) { updates.push(`min_spend = $${pIdx++}`); args.push(min_spend); }
+    if (start_date !== undefined) { updates.push(`start_date = $${pIdx++}`); args.push(start_date || null); }
+    if (end_date !== undefined) { updates.push(`end_date = $${pIdx++}`); args.push(end_date || null); }
+    if (branch_id !== undefined) { updates.push(`branch_id = $${pIdx++}`); args.push(finalBranchId); }
+    if (is_active !== undefined) { updates.push(`is_active = $${pIdx++}`); args.push(is_active ? 1 : 0); }
 
     if (updates.length > 0) {
       args.push(id);
-      await db.execute({
-        sql: `UPDATE offers SET ${updates.join(", ")} WHERE id = ?`,
-        args,
-      });
+      await db.query(
+        `UPDATE offers SET ${updates.join(", ")} WHERE id = $${pIdx}`,
+        args
+      );
     }
 
     return NextResponse.json({ success: true });
@@ -133,10 +134,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
 
   try {
-    await db.execute({
-      sql: "UPDATE offers SET is_active = 0 WHERE id = ?",
-      args: [id],
-    });
+    await db.query(
+      "UPDATE offers SET is_active = FALSE WHERE id = $1",
+      [id]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

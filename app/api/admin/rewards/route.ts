@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const rewards = await db.execute(`
+    const rewards = await db.query(`
       SELECT 
         o.id,
         o.name,
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     const result = rewardSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -76,16 +76,16 @@ export async function POST(request: Request) {
     let existing;
     if (finalBranchId) {
       const variants = await getBranchVariants(finalBranchId);
-      const placeholders = variants.map(() => "?").join(", ");
-      existing = await db.execute({
-        sql: `SELECT id FROM offers WHERE name = ? AND discount_type = 'reward' AND branch_id IN (${placeholders})`,
-        args: [name, ...variants]
-      });
+      const placeholders = variants.map((_, idx) => `$${idx + 2}`).join(", ");
+      existing = await db.query(
+        `SELECT id FROM offers WHERE name = $1 AND discount_type = 'reward' AND branch_id IN (${placeholders})`,
+        [name, ...variants]
+      );
     } else {
-      existing = await db.execute({
-        sql: "SELECT id FROM offers WHERE name = ? AND discount_type = 'reward' AND (branch_id IS NULL OR branch_id = '')",
-        args: [name]
-      });
+      existing = await db.query(
+        "SELECT id FROM offers WHERE name = $1 AND discount_type = 'reward' AND (branch_id IS NULL OR branch_id = '')",
+        [name]
+      );
     }
 
     if (existing.rows.length > 0) {
@@ -95,11 +95,11 @@ export async function POST(request: Request) {
     }
 
     const id = crypto.randomUUID();
-    await db.execute({
-      sql: `INSERT INTO offers 
+    await db.query(
+      `INSERT INTO offers 
             (id, name, description, discount_type, discount_value, points_required, min_spend, start_date, end_date, branch_id, is_active) 
-            VALUES (?, ?, ?, 'reward', 0, ?, 0, NULL, NULL, ?, ?)`,
-      args: [
+            VALUES ($1, $2, $3, 'reward', 0, $4, 0, NULL, NULL, $5, $6)`,
+      [
         id, 
         name, 
         description || "", 
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
         finalBranchId, 
         is_active ? 1 : 0
       ]
-    });
+    );
 
     return NextResponse.json({ 
       success: true, 

@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const combos = await db.execute(`
+    const combos = await db.query(`
       SELECT 
         c.*, 
         b.name as branch_name 
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     `);
     
     // Fetch related services for each combo
-    const comboServices = await db.execute(`
+    const comboServices = await db.query(`
       SELECT cs.combo_id, s.id as service_id, s.name as service_name
       FROM combo_services cs
       JOIN services s ON cs.service_id = s.id
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     const result = comboSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -84,15 +84,15 @@ export async function POST(request: Request) {
 
     let existing;
     if (finalBranchId) {
-      existing = await db.execute({
-        sql: "SELECT id FROM combos WHERE name = ? AND branch_id = ?",
-        args: [name, finalBranchId]
-      });
+      existing = await db.query(
+        "SELECT id FROM combos WHERE name = $1 AND branch_id = $2",
+        [name, finalBranchId]
+      );
     } else {
-      existing = await db.execute({
-        sql: "SELECT id FROM combos WHERE name = ? AND branch_id IS NULL",
-        args: [name]
-      });
+      existing = await db.query(
+        "SELECT id FROM combos WHERE name = $1 AND branch_id IS NULL",
+        [name]
+      );
     }
 
     if (existing.rows.length > 0) {
@@ -100,30 +100,31 @@ export async function POST(request: Request) {
     }
 
     const id = uuidv4();
-    const txn = await db.transaction("write");
+    const client = await db.connect();
 
     try {
-      await txn.execute({
-        sql: `INSERT INTO combos 
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO combos 
               (id, name, description, bundle_price, start_date, end_date, branch_id, is_active) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-        args: [
-          id, name, description || "", bundle_price, start_date || null, end_date || null, finalBranchId
-        ]
-      });
+              VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+        [id, name, description || "", bundle_price, start_date || null, end_date || null, finalBranchId]
+      );
 
       for (const svcId of service_ids) {
-        await txn.execute({
-          sql: "INSERT INTO combo_services (combo_id, service_id) VALUES (?, ?)",
-          args: [id, svcId]
-        });
+        await client.query(
+          "INSERT INTO combo_services (combo_id, service_id) VALUES ($1, $2)",
+          [id, svcId]
+        );
       }
 
-      await txn.commit();
+      await client.query("COMMIT");
       return NextResponse.json({ success: true });
     } catch (txnErr) {
-      await txn.rollback();
+      await client.query("ROLLBACK");
       throw txnErr;
+    } finally {
+      client.release();
     }
   } catch (error) {
     console.error("Error creating combo:", error);

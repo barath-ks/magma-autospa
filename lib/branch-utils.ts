@@ -18,17 +18,17 @@ export async function getBranchVariants(branchIdentifier?: string | null): Promi
   const slug = raw.toLowerCase().replace(/\s+/g, "-");
 
   try {
-    const res = await db.execute({
-      sql: `SELECT id, name, code, branch_code FROM branches 
-            WHERE id = ? COLLATE NOCASE 
-               OR name = ? COLLATE NOCASE 
-               OR code = ? COLLATE NOCASE 
-               OR branch_code = ? COLLATE NOCASE 
-               OR REPLACE(LOWER(name), ' ', '-') = ?
-               OR REPLACE(LOWER(id), ' ', '-') = ?
+    const res = await db.query(
+      `SELECT id, name, code, branch_code FROM branches 
+            WHERE LOWER(id) = LOWER($1) 
+               OR LOWER(name) = LOWER($2) 
+               OR LOWER(code) = LOWER($3) 
+               OR LOWER(branch_code) = LOWER($4) 
+               OR REPLACE(LOWER(name), ' ', '-') = LOWER($5)
+               OR REPLACE(LOWER(id), ' ', '-') = LOWER($6)
             LIMIT 1`,
-      args: [raw, raw, raw, raw, slug, slug]
-    });
+      [raw, raw, raw, raw, slug, slug]
+    );
 
     const set = new Set<string>();
     set.add(raw);
@@ -117,17 +117,17 @@ export async function resolveCanonicalBranchId(branchIdentifier?: string | null)
 
   try {
     const slug = raw.toLowerCase().replace(/\s+/g, "-");
-    const res = await db.execute({
-      sql: `SELECT id FROM branches 
-            WHERE id = ? COLLATE NOCASE 
-               OR name = ? COLLATE NOCASE 
-               OR code = ? COLLATE NOCASE 
-               OR branch_code = ? COLLATE NOCASE 
-               OR REPLACE(LOWER(name), ' ', '-') = ?
-               OR REPLACE(LOWER(id), ' ', '-') = ?
+    const res = await db.query(
+      `SELECT id FROM branches 
+            WHERE LOWER(id) = LOWER($1) 
+               OR LOWER(name) = LOWER($2) 
+               OR LOWER(code) = LOWER($3) 
+               OR LOWER(branch_code) = LOWER($4) 
+               OR REPLACE(LOWER(name), ' ', '-') = LOWER($5)
+               OR REPLACE(LOWER(id), ' ', '-') = LOWER($6)
             LIMIT 1`,
-      args: [raw, raw, raw, raw, slug, slug]
-    });
+      [raw, raw, raw, raw, slug, slug]
+    );
 
     if (res.rows.length > 0) {
       return res.rows[0].id as string;

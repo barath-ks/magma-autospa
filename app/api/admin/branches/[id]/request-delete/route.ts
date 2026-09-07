@@ -21,10 +21,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     const otpId = crypto.randomUUID();
 
-    await db.execute({
-      sql: `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at) VALUES (?, ?, 'phone', ?, 'branch_deletion', ?)`,
-      args: [otpId, session.user.id, hash, expiresAt]
-    });
+    await db.query(
+      `INSERT INTO otp_codes (id, user_id, channel, code_hash, purpose, expires_at) VALUES ($1, $2, 'phone', $3, 'branch_deletion', $4)`,
+      [otpId, session.user.id, hash, expiresAt]
+    );
 
     // TEMP: remove once SMS is configured
     console.log(`[TEMP SMS MOCK] Admin OTP for deleting branch ${id} is: ${otp}`);

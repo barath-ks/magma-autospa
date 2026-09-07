@@ -22,24 +22,23 @@ export async function GET(request: Request) {
 
   try {
     let result;
-    const branchFilter = isAdmin ? "" : "branch_id = ? AND ";
-    const args = isAdmin ? [] : [branchId];
+    const args: any[] = [];
+    let pIdx = 1;
 
     if (search.trim() === "") {
-      result = await db.execute({
-        sql: `SELECT c.* FROM customers c ${isAdmin ? "" : "WHERE c.branch_id = ?"} ORDER BY c.created_at DESC LIMIT 50`,
-        args: args,
-      });
+      const sql = `SELECT c.* FROM customers c ${isAdmin ? "" : `WHERE c.branch_id = $${pIdx++}`} ORDER BY c.created_at DESC LIMIT 50`;
+      if (!isAdmin) args.push(branchId);
+      result = await db.query(sql, args);
     } else {
       const searchTerm = `%${search}%`;
-      result = await db.execute({
-        sql: `SELECT DISTINCT c.* FROM customers c
-              LEFT JOIN vehicles v ON v.customer_id = c.id
-              WHERE ${isAdmin ? "" : "c.branch_id = ? AND "}
-              (c.name LIKE ? OR c.phone LIKE ? OR v.vehicle_number LIKE ?) 
-              ORDER BY c.name ASC LIMIT 50`,
-        args: [...args, searchTerm, searchTerm, searchTerm],
-      });
+      const sql = `SELECT DISTINCT c.* FROM customers c
+            LEFT JOIN vehicles v ON v.customer_id = c.id
+            WHERE ${isAdmin ? "" : `c.branch_id = $${pIdx++} AND `}
+            (c.name LIKE $${pIdx++} OR c.phone LIKE $${pIdx++} OR v.vehicle_number LIKE $${pIdx++}) 
+            ORDER BY c.name ASC LIMIT 50`;
+      if (!isAdmin) args.push(branchId);
+      args.push(searchTerm, searchTerm, searchTerm);
+      result = await db.query(sql, args);
     }
 
     return NextResponse.json({ customers: result.rows });
@@ -51,76 +50,77 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
+  
   if (!session || !session.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   const role = (session.user as any).role;
-  if (role !== "branch" && role !== "staff" && role !== "manager" && role !== "admin") {
+  if (role !== "branch" && role !== "manager" && role !== "admin" && role !== "staff") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const branchId = (session.user as any).branch_id;
-  
+  const staffBranchId = (session.user as any).branch_id;
+
   try {
     const body = await request.json();
-    const { name, phone, email, vehicle_number, vehicle_type, vehicle_model, vehicle_make } = body;
+    const { name, phone, email, vehicle_number, vehicle_type, vehicle_make, vehicle_model } = body;
 
-    const validationResult = customerSchema.safeParse({ name, phone, email });
-    if (!validationResult.success) {
-      const msg = validationResult.error.issues?.[0]?.message || "Invalid customer details";
-      return NextResponse.json({ error: msg }, { status: 400 });
+    if (!name || !phone || !vehicle_number) {
+      return NextResponse.json({ error: "Name, phone, and vehicle number are required" }, { status: 400 });
     }
 
     const cleanPhone = phone.trim();
+    const cleanVehicleNum = vehicle_number.toUpperCase().trim();
 
-    // Pre-flight check for phone uniqueness
-    const existingPhone = await db.execute({
-      sql: "SELECT id, name FROM customers WHERE phone = ?",
-      args: [cleanPhone]
-    });
-    if (existingPhone.rows.length > 0) {
-      const existingName = existingPhone.rows[0].name;
-      return NextResponse.json({ 
-        error: `A customer with phone number ${cleanPhone} is already registered (${existingName}).` 
-      }, { status: 409 });
-    }
-    
-    if (!vehicle_number || !vehicle_type) {
-      return NextResponse.json({ error: "Initial vehicle number and type are required" }, { status: 400 });
+    // Check duplicate vehicle plate
+    const vehicleCheck = await db.query(
+      "SELECT id FROM vehicles WHERE vehicle_number = $1",
+      [cleanVehicleNum]
+    );
+
+    if (vehicleCheck.rows.length > 0) {
+      return NextResponse.json({ error: `Vehicle plate '${cleanVehicleNum}' is already registered in the system.` }, { status: 409 });
     }
 
-    const vNum = vehicle_number.toUpperCase().trim();
+    // Check if phone number already exists
+    const phoneCheck = await db.query(
+      "SELECT id, name FROM customers WHERE phone = $1",
+      [cleanPhone]
+    );
 
-    // Pre-flight check for vehicle number uniqueness
-    const existingVehicle = await db.execute({
-      sql: "SELECT id FROM vehicles WHERE vehicle_number = ?",
-      args: [vNum]
-    });
-    if (existingVehicle.rows.length > 0) {
+    if (phoneCheck.rows.length > 0) {
       return NextResponse.json({ 
-        error: `Vehicle plate ${vNum} is already registered in the system.` 
+        error: `A customer with phone number '${cleanPhone}' already exists (${phoneCheck.rows[0].name}).` 
       }, { status: 409 });
     }
 
-    const id = crypto.randomUUID();
+    const customerId = crypto.randomUUID();
     const vehicleId = crypto.randomUUID();
-    
-    const statements = [
-      {
-        sql: `INSERT INTO customers (id, name, phone, email, branch_id)
-              VALUES (?, ?, ?, ?, ?)`,
-        args: [id, name.trim(), cleanPhone, email ? email.trim() : null, branchId]
-      },
-      {
-        sql: `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_model, vehicle_make)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [vehicleId, id, vNum, vehicle_type, vehicle_model || null, vehicle_make || null]
-      }
-    ];
+    const branchId = staffBranchId;
 
-    await db.batch(statements, "write");
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO customers (id, name, phone, email, branch_id, points_balance) 
+              VALUES ($1, $2, $3, $4, $5, 0)`,
+        [customerId, name, cleanPhone, email || null, branchId]
+      );
+      await client.query(
+        `INSERT INTO vehicles (id, customer_id, vehicle_number, vehicle_type, vehicle_make, vehicle_model) 
+              VALUES ($1, $2, $3, $4, $5, $6)`,
+        [vehicleId, customerId, cleanVehicleNum, vehicle_type || 'car', vehicle_make || null, vehicle_model || null]
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
-    return NextResponse.json({ id, name, phone, email, points_balance: 0 });
+    return NextResponse.json({ id: customerId, name, phone, email, points_balance: 0 });
   } catch (error: any) {
     console.error("Error creating customer:", error);
     if (error.message && error.message.includes("UNIQUE constraint failed: customers.phone")) {

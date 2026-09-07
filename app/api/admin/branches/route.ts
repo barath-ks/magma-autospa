@@ -24,12 +24,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const branches = await db.execute(`
+    const branches = await db.query(`
       SELECT 
         b.id, b.name, b.code, b.branch_code, b.email, b.display_password, b.must_change_password, b.location, b.phone, b.is_active, b.created_at,
-        (SELECT COUNT(*) FROM users u WHERE u.branch_id = b.id AND u.role = 'staff' AND u.is_active = 1) as active_staff_count,
-        (SELECT u.id FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = 1 LIMIT 1) as manager_id,
-        (SELECT u.name FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = 1 LIMIT 1) as manager_name
+        (SELECT COUNT(*) FROM users u WHERE u.branch_id = b.id AND u.role = 'staff' AND u.is_active = TRUE) as active_staff_count,
+        (SELECT u.id FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = TRUE LIMIT 1) as manager_id,
+        (SELECT u.name FROM users u WHERE u.branch_id = b.id AND u.role = 'manager' AND u.is_active = TRUE LIMIT 1) as manager_name
       FROM branches b
       ORDER BY b.created_at DESC
     `);
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const result = createBranchSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -62,11 +62,11 @@ export async function POST(request: Request) {
     const branchEmail = email && email.trim() !== "" ? email.trim() : `${code.toLowerCase()}@magma-autospa.com`;
 
     // Check for duplicate code, name, or email
-    const existing = await db.execute({
-      sql: `SELECT id FROM branches 
-            WHERE (name = ? COLLATE NOCASE OR code = ? COLLATE NOCASE OR branch_code = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)`,
-      args: [name, code, branchCode, branchEmail]
-    });
+    const existing = await db.query(
+      `SELECT id FROM branches 
+            WHERE (LOWER(name) = LOWER($1) OR LOWER(code) = LOWER($2) OR LOWER(branch_code) = LOWER($3) OR LOWER(email) = LOWER($4))`,
+      [name, code, branchCode, branchEmail]
+    );
 
     if (existing.rows.length > 0) {
       return NextResponse.json({ error: "A branch with this name, code, or email already exists" }, { status: 400 });
@@ -78,13 +78,13 @@ export async function POST(request: Request) {
     const mustChange = must_change_password !== undefined ? (must_change_password ? 1 : 0) : 1;
 
     const id = uuidv4();
-    await db.execute({
-      sql: `INSERT INTO branches (
+    await db.query(
+      `INSERT INTO branches (
               id, name, code, branch_code, email, password_hash, display_password, 
               must_change_password, location, address, phone, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      args: [id, name, code, branchCode, branchEmail, passwordHash, tempPassword, mustChange, location, location, phone]
-    });
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1)`,
+      [id, name, code, branchCode, branchEmail, passwordHash, tempPassword, mustChange, location, location, phone]
+    );
 
     return NextResponse.json({ 
       success: true, 

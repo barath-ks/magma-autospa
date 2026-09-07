@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const services = await db.execute(`
+    const services = await db.query(`
       SELECT 
         s.*, 
         b.name as branch_name 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const result = createServiceSchema.safeParse(body);
     
     if (!result.success) {
-      const msg = result.error.issues?.[0]?.message || result.error.errors?.[0]?.message || "Validation failed";
+      const msg = result.error.issues?.[0]?.message || (result.error as any).errors?.[0]?.message || "Validation failed";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     
@@ -61,15 +61,15 @@ export async function POST(request: Request) {
     // Check for duplicate name in the same scope (branch or global)
     let existing;
     if (finalBranchId) {
-      existing = await db.execute({
-        sql: "SELECT id FROM services WHERE name = ? AND branch_id = ?",
-        args: [name, finalBranchId]
-      });
+      existing = await db.query(
+        "SELECT id FROM services WHERE name = $1 AND branch_id = $2",
+        [name, finalBranchId]
+      );
     } else {
-      existing = await db.execute({
-        sql: "SELECT id FROM services WHERE name = ? AND branch_id IS NULL",
-        args: [name]
-      });
+      existing = await db.query(
+        "SELECT id FROM services WHERE name = $1 AND branch_id IS NULL",
+        [name]
+      );
     }
 
     if (existing.rows.length > 0) {
@@ -77,11 +77,11 @@ export async function POST(request: Request) {
     }
 
     const id = uuidv4();
-    await db.execute({
-      sql: `INSERT INTO services (id, name, description, price, points_earned, duration_minutes, category, branch_id, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      args: [id, name, description || "", price, points_earned, duration_minutes || null, category || "", finalBranchId]
-    });
+    await db.query(
+      `INSERT INTO services (id, name, description, price, points_earned, duration_minutes, category, branch_id, is_active) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)`,
+      [id, name, description || "", price, points_earned, duration_minutes || null, category || "", finalBranchId]
+    );
 
     return NextResponse.json({ success: true, service: { id, name, branch_id: finalBranchId, is_active: 1 } });
   } catch (error) {

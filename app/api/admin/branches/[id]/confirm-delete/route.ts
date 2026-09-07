@@ -21,13 +21,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     }
 
     // Verify OTP
-    const otpRes = await db.execute({
-      sql: `SELECT id, code_hash, expires_at 
+    const otpRes = await db.query(
+      `SELECT id, code_hash, expires_at 
             FROM otp_codes 
-            WHERE user_id = ? AND purpose = 'branch_deletion' AND used = 0
+            WHERE user_id = $1 AND purpose = 'branch_deletion' AND used = 0
             ORDER BY created_at DESC LIMIT 1`,
-      args: [session.user.id]
-    });
+      [session.user.id]
+    );
 
     if (otpRes.rows.length === 0) {
       return NextResponse.json({ error: "No pending OTP found. Please request a new one." }, { status: 400 });
@@ -46,11 +46,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     }
 
     // OTP is valid. Deactivate branch and users atomically.
-    await db.batch([
-      { sql: "UPDATE otp_codes SET used = 1 WHERE id = ?", args: [latestOtp.id] },
-      { sql: "UPDATE branches SET is_active = 0 WHERE id = ?", args: [id] },
-      { sql: "UPDATE users SET is_active = 0 WHERE branch_id = ?", args: [id] }
-    ]);
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("UPDATE otp_codes SET used = 1 WHERE id = $1", [latestOtp.id]);
+      await client.query("UPDATE branches SET is_active = FALSE WHERE id = $1", [id]);
+      await client.query("UPDATE users SET is_active = FALSE WHERE branch_id = $1", [id]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
     return NextResponse.json({ success: true, message: "Branch deleted successfully" });
   } catch (error) {

@@ -13,10 +13,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const { id } = await props.params;
 
   try {
-    await db.batch([
-      { sql: "UPDATE branches SET is_active = 1 WHERE id = ?", args: [id] },
-      { sql: "UPDATE users SET is_active = 1 WHERE branch_id = ?", args: [id] }
-    ]);
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("UPDATE branches SET is_active = TRUE WHERE id = $1", [id]);
+      await client.query("UPDATE users SET is_active = TRUE WHERE branch_id = $1", [id]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
     return NextResponse.json({ success: true, message: "Branch reactivated successfully" });
   } catch (error) {

@@ -22,79 +22,79 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "month";
 
-  let dateModifier = "'-1 month'";
-  let prevPeriodStart = "'-2 months'";
+  let intervalStr = "1 month";
+  let prevIntervalStr = "2 months";
   if (range === "week") {
-    dateModifier = "'-7 days'";
-    prevPeriodStart = "'-14 days'";
+    intervalStr = "7 days";
+    prevIntervalStr = "14 days";
   }
   if (range === "year") {
-    dateModifier = "'-1 year'";
-    prevPeriodStart = "'-2 years'";
+    intervalStr = "1 year";
+    prevIntervalStr = "2 years";
   }
 
-  const branchFilter = isAdmin ? "" : "branch_id = ? AND ";
-  const tBranchFilter = isAdmin ? "" : "t.branch_id = ? AND ";
+  const branchFilter = isAdmin ? "" : "branch_id = $1 AND ";
+  const tBranchFilter = isAdmin ? "" : "t.branch_id = $1 AND ";
   const args = isAdmin ? [] : [branchId];
 
   try {
     // 1. Transaction Stats (Revenue, Count, Points Awarded)
-    const txStatsRes = await db.execute({
-      sql: `SELECT 
+    const txStatsRes = await db.query(
+      `SELECT 
               COALESCE(SUM(total_amount), 0) as revenue,
               COUNT(*) as tx_count,
               COALESCE(SUM(points_awarded), 0) as points_awarded
             FROM transactions 
-            WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier})`,
-      args: args,
-    });
+            WHERE ${branchFilter}created_at >= NOW() - INTERVAL '${intervalStr}'`,
+      args
+    );
 
     const stats = txStatsRes.rows[0];
 
     // 1b. Points Redeemed
-    const redeemStatsRes = await db.execute({
-      sql: `SELECT COALESCE(SUM(points_redeemed), 0) as points_redeemed 
+    const redeemStatsRes = await db.query(
+      `SELECT COALESCE(SUM(points_redeemed), 0) as points_redeemed 
             FROM redemptions 
-            WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier})`,
-      args: args,
-    });
+            WHERE ${branchFilter}created_at >= NOW() - INTERVAL '${intervalStr}'`,
+      args
+    );
     
     const pointsRedeemed = redeemStatsRes.rows[0].points_redeemed;
 
     // 2. New Customers
-    const customerStatsRes = await db.execute({
-      sql: `SELECT COUNT(*) as new_customers 
+    const customerStatsRes = await db.query(
+      `SELECT COUNT(*) as new_customers 
             FROM customers 
-            WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier})`,
-      args: args,
-    });
+            WHERE ${branchFilter}created_at >= NOW() - INTERVAL '${intervalStr}'`,
+      args
+    );
 
     const newCustomers = customerStatsRes.rows[0].new_customers;
 
     // 3. Top 5 Services
-    const topServicesRes = await db.execute({
-      sql: `SELECT 
+    const topServicesRes = await db.query(
+      `SELECT 
               s.name,
               COUNT(ts.id) as count,
               COALESCE(SUM(ts.price_at_time), 0) as revenue
             FROM transaction_services ts
             JOIN services s ON ts.service_id = s.id
             JOIN transactions t ON ts.transaction_id = t.id
-            WHERE ${tBranchFilter}t.created_at >= datetime('now', ${dateModifier})
+            WHERE ${tBranchFilter}t.created_at >= NOW() - INTERVAL '${intervalStr}'
             GROUP BY s.id, s.name
             ORDER BY count DESC
             LIMIT 5`,
-      args: args,
-    });
+      args
+    );
 
     // 4. Previous Period Revenue
-    const prevTxStatsRes = await db.execute({
-      sql: `SELECT COALESCE(SUM(total_amount), 0) as prev_revenue
+    const prevTxStatsRes = await db.query(
+      `SELECT COALESCE(SUM(total_amount), 0) as prev_revenue
             FROM transactions 
-            WHERE ${branchFilter}created_at >= datetime('now', ${prevPeriodStart})
-              AND created_at < datetime('now', ${dateModifier})`,
-      args: args,
-    });
+            WHERE ${branchFilter}created_at >= NOW() - INTERVAL '${prevIntervalStr}'
+              AND created_at < NOW() - INTERVAL '${intervalStr}'`,
+      args
+    );
     const prevRevenue = prevTxStatsRes.rows[0].prev_revenue;
     let revenueGrowth = null; // null indicates no previous data to compare against
     if (prevRevenue > 0) {
@@ -102,23 +102,23 @@ export async function GET(request: Request) {
     }
 
     // 5. Repeat Visit Rate (Using finished transactions only)
-    const repeatRes = await db.execute({
-      sql: `
+    const repeatRes = await db.query(
+      `
         SELECT 
           COUNT(customer_id) as total_unique,
           SUM(CASE WHEN visit_count > 1 THEN 1 ELSE 0 END) as repeat_customers
         FROM (
           SELECT customer_id, COUNT(*) as visit_count
           FROM transactions
-          WHERE ${branchFilter}created_at >= datetime('now', ${dateModifier}) AND status = 'finished'
+          WHERE ${branchFilter}created_at >= NOW() - INTERVAL '${intervalStr}' AND status = 'finished'
           GROUP BY customer_id
-        )
+        ) sub
       `,
-      args: args,
-    });
+      args
+    );
     
-    const totalUnique = Number(repeatRes.rows[0].total_unique || 0);
-    const repeatCustomers = Number(repeatRes.rows[0].repeat_customers || 0);
+    const totalUnique = Number(repeatRes.rows[0]?.total_unique || 0);
+    const repeatCustomers = Number(repeatRes.rows[0]?.repeat_customers || 0);
     const repeatVisitRate = totalUnique > 0 ? (repeatCustomers / totalUnique) * 100 : 0;
 
     // 6. Average Ticket Size (Aligning exactly with total Revenue / total Transactions shown)

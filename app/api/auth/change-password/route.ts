@@ -20,10 +20,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Current and new password are required" }, { status: 400 });
     }
 
-    const user = await db.execute({
-      sql: "SELECT password_hash FROM users WHERE id = ?",
-      args: [session.user.id]
-    });
+    const user = await db.query(
+      "SELECT password_hash FROM users WHERE id = $1",
+      [session.user.id]
+    );
 
     if (!user.rows.length) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -42,16 +42,24 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    await db.batch([
-      {
-        sql: "INSERT INTO password_history (id, user_id, password_hash) VALUES (?, ?, ?)",
-        args: [uuidv4(), session.user.id, hashedPassword]
-      },
-      {
-        sql: "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
-        args: [hashedPassword, session.user.id]
-      }
-    ]);
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "INSERT INTO password_history (id, user_id, password_hash) VALUES ($1, $2, $3)",
+        [uuidv4(), session.user.id, hashedPassword]
+      );
+      await client.query(
+        "UPDATE users SET password_hash = $1, must_change_password = 0 WHERE id = $2",
+        [hashedPassword, session.user.id]
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
